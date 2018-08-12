@@ -85,10 +85,15 @@ def fit_line(x,y):
 def fit_gain(args):
     global chan_gain, chan_intercept
     nonzero = np.nonzero([chan_means[i].size for i in range(len(chan_means))])[0]
+    count = 0
     for i in nonzero:
+        if ((count % 100000) == 0):
+            print "fit number ", count, " of ", nonzero.size
         if (chan_means[i].size <= 1):
             continue
         chan_gain[i],chan_intercept[i] = fit_line(chan_means[i], chan_vars[i])
+        count = count + 1
+
 
     if (args.commit):
         print "saving fitted gain results"
@@ -97,6 +102,19 @@ def fit_gain(args):
         full_gain[first_pixel:last_pixel] = chan_gain
         full_intercept[first_pixel:last_pixel] = chan_intercept
         np.savez("calib/gain.npz", gain=full_gain, intercept=full_intercept)
+
+        full_count      = np.zeros(pixels,dtype=int)
+        full_count[first_pixel:last_pixel] = np.array([chan_means[i].size for i in range(len(chan_means))])
+        full_means      = np.concatenate(chan_means)
+        full_vars       = np.concatenate(chan_vars)
+
+        print np.sum(full_count)
+        print full_means.size
+        print full_vars.size
+
+        np.savez("calib/gain_points.npz",count=full_count, means=full_means, vars=full_vars)
+
+
 
     return
 

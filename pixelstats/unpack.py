@@ -62,4 +62,5 @@ def show_header(header):
     print "file index:                     ", interpret_header(header, "ifile")
     print "pixel_start:                    ", interpret_header(header, "pixel_start")
     print "pixel_end:                      ", interpret_header(header, "pixel_end")
+    print "sample_step:                    ", interpret_header(header, "sample_step")
 

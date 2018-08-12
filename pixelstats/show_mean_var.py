@@ -64,9 +64,6 @@ def process(filename, args):
         except:
             print "dark pixel file calib/all_dark.npy does not exist."
             return
-        print index[:10]
-        print all_dark[0]
-        print all_dark[1]
 
         new_dark = [all_dark[i] for i in index]
         print new_dark[:10]
@@ -89,6 +86,28 @@ def process(filename, args):
             keep = keep * ((xpos%2)==0) * ((ypos%2)==1)
         if (args.filter == 3):
             keep = keep * ((xpos%2)==1) * ((ypos%2)==1)
+
+    if (args.gain):
+        try:
+            avg_gain = np.load("calib/avg_gain.npz")            
+        except:
+            print "average gain file calib/avg_gain.npz does not exist."
+            return
+        print avg_gain.files
+        good = avg_gain['keep']
+        gain = avg_gain['gain']
+        new_good = [good[i] for i in index]
+        new_gain = [gain[i] for i in index]
+        good = np.array(new_good)
+        gain = np.array(new_gain)
+        keep = keep & good
+        
+        cmean = cmean / gain
+        cvari = cvari / np.square(gain)
+        
+
+
+
 
     cmean = cmean[keep]
     cvari = cvari[keep]
@@ -206,6 +225,7 @@ if __name__ == "__main__":
     parser.add_argument('--all_dark',action="store_true", help="drop non-dark pixels from all plots.")
     parser.add_argument('--by_filter',action="store_true", help="produce 4 plots for each corner of the 2x2 filter arrangement.")
     parser.add_argument('--by_radius',action="store_true", help="produce 4 plots at three different locations from radius.")
+    parser.add_argument('--gain',action="store_true", help="apply gain correction.")
     args = parser.parse_args()
 
     for filename in args.files:
