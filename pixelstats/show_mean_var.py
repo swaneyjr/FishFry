@@ -44,7 +44,7 @@ def process(filename, args):
         sum      = npz['sum']
         ssq      = npz['ssq']
         num     = npz['num']
-        index = np.arange(num.size)
+        index = np.arange(sum.size)
 
     
     empty = (num == 0)

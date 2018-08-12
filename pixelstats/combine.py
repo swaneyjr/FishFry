@@ -48,7 +48,6 @@ def process(filename):
         #print "(skipping file ", filename, " with exposure ", exposure, ")"
         return
 
-
     print "processing file:  ", filename
 
 
@@ -59,22 +58,28 @@ def process(filename):
         EXPOSURE = exposure
         SUM = np.zeros(PIXELS)
         SSQ = np.zeros(PIXELS)
-        NUM = images
+        NUM = np.zeros(PIXELS)
 
     if exposure!=EXPOSURE or sens!=SENS:
         print "ERROR: inconsistent run parameters in file ", filename
         unpack_header(filename, show=1)
         exit(0)
 
-    SUM += np.pad(arr_sum, (pixel_start, PIXELS-pixel_end), mode='constant', constant_values=0)
-    SSQ += np.pad(arr_ssq, (pixel_start, PIXELS-pixel_end), mode='constant', constant_values=0)
+    print arr_sum.size
+    print pixel_start
+    print pixel_end
+    print PIXELS
+
+    SUM[pixel_start:pixel_end] += arr_sum
+    SSQ[pixel_start:pixel_end] += arr_ssq
+    NUM[pixel_start:pixel_end] += images
 
 def post():
     print "saving combined data to", OUTFILE
-
-    #dat = (csum,cssq,cnum)
+    print "sum length:  ", SUM.size
+    print "ssq length:  ", SSQ.size
+    print "num length:  ", NUM.size
     np.savez(OUTFILE, sum=SUM, ssq=SSQ, num=NUM, exposure=EXPOSURE, sens=SENS)
-
 
 if __name__ == "__main__":
     example_text = '''example:
