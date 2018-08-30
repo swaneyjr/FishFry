@@ -1,0 +1,2 @@
+arp -a
+rsync -e 'ssh -p 2222' -v ./*.cal 192.168.0.104:SDCard/FishStand/

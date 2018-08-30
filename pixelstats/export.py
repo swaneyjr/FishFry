@@ -69,7 +69,7 @@ def analysis(args):
     p = np.array([],dtype=">f4")
     p = np.append(p,wgt)
 
-    with open('calib/weight.dat', 'w+') as f:
+    with open('calib/pixel_weight.cal', 'w+') as f:
         h.tofile(f)
         p.tofile(f)
 
@@ -77,7 +77,7 @@ def analysis(args):
     h = np.append(h,hot.size)
     h = np.append(h,hot)
 
-    with open('calib/hot.dat', 'w+') as f:
+    with open('calib/hot_pixels.cal', 'w+') as f:
         h.tofile(f)
 
 
