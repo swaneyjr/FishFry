@@ -66,19 +66,16 @@ def analysis(args):
     h = np.append(h,nx)
     h = np.append(h,ny)
 
-    p = np.array([],dtype=">f4")
-    p = np.append(p,wgt)
-
     with open('calib/pixel_weight.cal', 'w+') as f:
-        h.tofile(f)
-        p.tofile(f)
+        h.astype(">i4").tofile(f)
+        wgt.astype(">f4").tofile(f)
 
-    h = np.array([],dtype=">i4")
+    h = np.array([])
     h = np.append(h,hot.size)
     h = np.append(h,hot)
 
     with open('calib/hot_pixels.cal', 'w+') as f:
-        h.tofile(f)
+        h.astype(">i4").tofile(f)
 
 
 
