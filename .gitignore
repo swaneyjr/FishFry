@@ -6,4 +6,5 @@
 *.png
 *.npy
 *.npz
+*.dat
 data
