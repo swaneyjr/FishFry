@@ -144,15 +144,15 @@ def process(filename, args):
 
 
     if (args.by_filter):
-        #posA = ((xpos%2)==0) * ((ypos%2)==0)
-        #posB = ((xpos%2)==1) * ((ypos%2)==0)
-        #posC = ((xpos%2)==0) * ((ypos%2)==1)
-        #posD = ((xpos%2)==1) * ((ypos%2)==1)
+        posA = ((xpos%2)==0) * ((ypos%2)==0)
+        posB = ((xpos%2)==1) * ((ypos%2)==0)
+        posC = ((xpos%2)==0) * ((ypos%2)==1)
+        posD = ((xpos%2)==1) * ((ypos%2)==1)
 
-        posA = ((ypos%4)==0) 
-        posB = ((ypos%4)==1) 
-        posC = ((ypos%4)==2) 
-        posD = ((ypos%4)==3) 
+        #posA = ((ypos%4)==0) 
+        #posB = ((ypos%4)==1) 
+        #posC = ((ypos%4)==2) 
+        #posD = ((ypos%4)==3) 
 
 
         plt.subplot(2,2,1)
@@ -248,8 +248,7 @@ if __name__ == "__main__":
     parser.add_argument('--by_filter',action="store_true", help="produce 4 plots for each corner of the 2x2 filter arrangement.")
     parser.add_argument('--by_radius',action="store_true", help="produce 4 plots at three different locations from radius.")
     parser.add_argument('--gain',action="store_true", help="apply gain correction.")
-    parser.add_argument('--hot-cells',action="store_true", help="apply gain correction.")
-    parser.add_argument('--hot', nargs=2, metavar=("MEAN","VAR"), type=int,help="save list of pixels where mean > MEAN or var > VAR")
+    parser.add_argument('--hot', nargs=2, metavar=("MEAN","VAR"), type=float,help="save list of pixels where mean > MEAN or var > VAR")
     args = parser.parse_args()
 
     for filename in args.files:

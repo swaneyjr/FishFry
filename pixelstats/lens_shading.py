@@ -36,17 +36,33 @@ def calculate(args):
     intercept  = gains['intercept']
 
     # load the hot cell list:
-    try:
-        filename = "calib/hot.npz"
-        hots  = np.load(filename);
-    except:
-        print "could not process file ", filename, " as .npz file.  Run gain.py with --commit option first?"
-        return
-    hot       = hots['hot_list']
+    #try:
+    #    filename = "calib/hot.npz"
+    #    hots  = np.load(filename);
+    #except:
+    #    print "could not process file ", filename, " as .npz file.  Run gain.py with --commit option first?"
+    #    return
+    #hot       = hots['hot_list']
 
-    # TODO: omit dark pixels, if present:
-    good = np.isfinite(gain) & np.isfinite(intercept) 
-    normal = good
+    keep = np.isfinite(gain) & np.isfinite(intercept) 
+
+    if (args.no_dark):
+        try:
+            all_dark = np.load("calib/all_dark.npy")            
+        except:
+            print "dark pixel file calib/all_dark.npy does not exist."
+            return
+        keep = keep & (all_dark == False)
+
+    if (args.no_hot):
+        try:
+            filename = "calib/hot.npz"
+            hots  = np.load(filename);
+        except:
+            print "could not process file ", filename, " as .npz file."
+            return
+        #hot = hots['hot_list']
+        #keep = keep & (all_dark == False)
 
     # position for down sampling by 8x8 
     ds = args.down_sample
@@ -54,7 +70,7 @@ def calculate(args):
     G = np.zeros(nx*ny, dtype=float)
     S = np.zeros(nx*ny, dtype=float)
     W = np.zeros(nx*ny, dtype=float)
-    for i in np.where(normal)[0]:
+    for i in np.where(keep)[0]:
         if (args.short & (i > 100000)):
             break;
         if (gain[i] < 0):
@@ -83,6 +99,7 @@ def load(args):
 def plot(args, lens):
     plt.imshow(lens, vmin=args.min_gain, vmax=args.max_gain)
     plt.colorbar()
+    plt.savefig("plots/lens.pdf")
     plt.show()
 
 def analysis(args):
@@ -102,7 +119,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='construct the lens shading map from calculated gains', epilog=example_text,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--sandbox',action="store_true", help="run sandbox code and exit (for development).")
-    parser.add_argument('--dark',action="store_true", help="exclude dark pixels from analysis.")
+    parser.add_argument('--no_dark',action="store_true", help="exclude dark pixels from analysis.")
+    parser.add_argument('--no_hot',action="store_true", help="exclude hot pixels from analysis.")
     parser.add_argument('--short',action="store_true", help="short (test) analysis of a few pixels.")
     parser.add_argument('--down_sample',  type=int, default=8,help="down sampling amount.")
     parser.add_argument('--max_gain',  type=float, default=10,help="minimum gain for plot.")

@@ -45,12 +45,12 @@ def analysis(args):
     print "down sample:                ", ds
     print "width:                      ", width
     print "height:                     ", height
-    ny = lens.shape[0]
-    nx = lens.shape[1]
-    print "nx:                         ", nx
-    print "ny:                         ", ny
-    print "nx*ds:                      ", nx*ds
-    print "ny*ds:                      ", ny*ds
+    ly = lens.shape[0]
+    lx = lens.shape[1]
+    print "lx:                         ", lx
+    print "ly:                         ", ly
+    print "lx*ds:                      ", lx*ds
+    print "ly*ds:                      ", ly*ds
 
     wgt = lens.reshape(lens.size)
     pos = (wgt > 0)
@@ -62,9 +62,11 @@ def analysis(args):
     print "weight 1:                   ", wgt[1]
 
     h = np.array([],dtype=">i4")
+    h = np.append(h,width)
+    h = np.append(h,height)
     h = np.append(h,ds)
-    h = np.append(h,nx)
-    h = np.append(h,ny)
+    h = np.append(h,lx)
+    h = np.append(h,ly)
 
     with open('calib/pixel_weight.cal', 'w+') as f:
         h.astype(">i4").tofile(f)
