@@ -18,11 +18,12 @@ def unpack_all(filename):
         header      = np.insert(header, 0, version)
         num         = interpret_header(header, "hist_max")
         hist_uncal  = np.fromfile(f,dtype=">i8",count=num)
+        hist_unhot  = np.fromfile(f,dtype=">i8",count=num)
         hist_calib  = np.fromfile(f,dtype=">i8",count=num)
-        return header,hist_uncal,hist_calib
+        return header,hist_uncal,hist_unhot,hist_calib
 
 def unpack_header(filename):
-    header,hist_uncal,hist_calib = unpack_all(filename)
+    header,hist_uncal,hit_unhot,hist_calib = unpack_all(filename)
     return header
 
 def interpret_header(header, param):    

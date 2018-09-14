@@ -1,20 +1,22 @@
 #! /usr/bin/env python
 
-# dump the header from run data
+# dump a header from run data
 
 import sys
-from unpack import *
-
 import argparse
 
-
 def process(filename,args):
-    header = unpack_header(filename)
-    show_header(header)
+    if (args.hist):
+        import unpack_hist as unpack
+    else:
+        import unpack_trigger as unpack
+
+    header = unpack.unpack_header(filename)
+    unpack.show_header(header)
 
     if (args.geometry):
-        width = interpret_header(header,"width")
-        height = interpret_header(header,"height")
+        width = unpack.interpret_header(header,"width")
+        height = unpack.interpret_header(header,"height")
         print "recording width:   ", width
         print "recording height:  ", height
         np.savez("calib/geometry.npz", width=width, height=height)
@@ -30,6 +32,7 @@ if __name__ == "__main__":
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('files', metavar='FILE', nargs='+', help='file to process')
     parser.add_argument('--geometry',action="store_true", help="save geometry data to calibration file")
+    parser.add_argument('--hist',action="store_true", help="dump header from a cosmic histogram file")
     args = parser.parse_args()
 
     if (args.geometry):
