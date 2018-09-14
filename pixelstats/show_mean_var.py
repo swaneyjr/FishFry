@@ -118,6 +118,9 @@ def process(filename, args):
         HOT_FILE = "calib/hot.npz";
         print "saving  ", hot_list.size, "hot pixels to file ", HOT_FILE;
         print "total pixels in device:  ", width * height
+        frac = float(hot_list.size) / float(width*height)
+        print "faction of hot pixels:  ", frac
+
         np.savez(HOT_FILE, hot_list=hot_list)
 
         keep = (hot == False)
@@ -200,7 +203,6 @@ def process(filename, args):
         plt.xlabel("mean")
         plt.ylabel("variance")    
         plt.show()
-
 
     return
 
