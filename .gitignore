@@ -9,3 +9,4 @@
 *.cal
 data
 calib
+log*.txt
