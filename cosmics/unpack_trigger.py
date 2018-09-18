@@ -28,16 +28,19 @@ def unpack_all(filename):
         region_dy = interpret_header(header, "region_dy")
         region_size   = (2*region_dx+1)*(2*region_dy+1)        
         region_buffer = region_size + 3 
-        px      = np.array([],dtype="u2")
-        py      = np.array([],dtype="u2")
-        highest = np.array([],dtype="u2")
-        region  = np.array([],dtype="u2")
+        px        = np.array([],dtype="u2")
+        py        = np.array([],dtype="u2")
+        highest   = np.array([],dtype="u2")
+        region    = np.array([],dtype="u2")
+        timestamp = np.array([],dtype="u4")
+        millistamp = np.array([],dtype="u4")
         dropped = 0
         images = 0
         while(1):
             ts = np.fromfile(f,dtype=">i8",count=1)[0]
             if (ts == 0):
                 break;
+            ms = np.fromfile(f,dtype=">i8",count=1)[0]
             images = images+1
             num_region = np.fromfile(f,dtype=">i4",count=1)[0]
             dropped   += np.fromfile(f,dtype=">i4",count=1)[0]
@@ -51,10 +54,12 @@ def unpack_all(filename):
             py      = np.append(py, region_data[py_mask])
             highest = np.append(highest, region_data[h_mask])
             region  = np.append(region, region_data[region_mask])
+            timestamp = np.append(timestamp, np.full(num_region, ts))
+            millistamp = np.append(millistamp, np.full(num_region, ms))
         region = np.reshape(region,(-1,region_size))
         header = np.append(header, threshold)
         header = np.append(header, prescale)
-        return header,px,py,highest,region,images,dropped
+        return header,px,py,highest,region,timestamp,millistamp,images,dropped
 
 def unpack_header(filename):
     header,px,py,highest,region,images,dropped = unpack_all(filename)

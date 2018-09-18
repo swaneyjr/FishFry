@@ -4,6 +4,7 @@
 
 import sys
 import argparse
+import numpy as np
 
 def process(filename,args):
     if (args.hist):

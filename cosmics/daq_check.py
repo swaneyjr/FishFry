@@ -13,36 +13,40 @@ from calibrate import *
 def process_hist(filename, args):
 
     # load data:
-    header,hist_uncal,hist_unhot,hist_calib = hist.unpack_all(filename)
+    header,hist_uncal,hist_nohot,hist_calib = hist.unpack_all(filename)
     images = hist.interpret_header(header, "images")
     width  = hist.interpret_header(header, "width")
     height = hist.interpret_header(header, "height")
 
-    norm = float(width) * float(height) * float(images)
+    hist_prescale = hist.interpret_header(header, "hist_prescale")
+
+    norm = hist_prescale / (float(width) * float(height) * float(images))
     hist_uncal = hist_uncal.astype(float)
     hist_calib = hist_calib.astype(float)
 
-    print hist_uncal
-    print hist_calib
+    print hist_uncal.size
+    print hist_calib.size
+    print hist_nohot.size
+
         
-    err_uncal = hist_uncal**0.5
+    err_nohot = hist_nohot**0.5
     err_calib = hist_calib**0.5
     
     # scale counts to a rate:
-    hist_uncal = hist_uncal / norm
-    hist_calib = hist_calib / norm
-    err_uncal = err_uncal / norm
-    err_calib = err_calib / norm
+    hist_nohot = hist_nohot * norm
+    hist_calib = hist_calib * norm
+    err_nohot = err_nohot * norm
+    err_calib = err_calib * norm
 
     cbins = np.arange(hist_calib.size)
 
     if (args.calib):
         return cbins, hist_calib, err_calib;
     else:
-        return cbins, hist_uncal, err_uncal;
+        return cbins, hist_nohot, err_nohot;
 
 def process_trig(filename,args,ref_bins, ref_hist, ref_err):
-    header,px,py,highest,region,images,dropped = trigger.unpack_all(filename)
+    header,px,py,highest,region,timestamp,millistamp,images,dropped = trigger.unpack_all(filename)
     trigger.show_header(header)
     num_zerobias = trigger.interpret_header(header, "num_zerobias")
     width  = trigger.interpret_header(header, "width")
@@ -91,10 +95,9 @@ def process_trig(filename,args,ref_bins, ref_hist, ref_err):
         trig_hist.append(h)
         trig_err.append(err)
 
-
-
     plt.errorbar(ref_bins,ref_hist,yerr=ref_err,color="black",fmt="--")
-    plt.errorbar(cbins[:5],hzb[:5],yerr=errzb[:5],color="black",fmt="o")
+    plt.errorbar(cbins,hzb,yerr=errzb,color="black",fmt="o")
+
     for i in range(prescale.size):
         plt.errorbar(cbins,trig_hist[i],yerr=trig_err[i],fmt="o")
     plt.xlabel("pixel value")
