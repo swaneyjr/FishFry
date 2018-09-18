@@ -49,7 +49,6 @@ def process(filename):
         #print "(skipping file ", filename, " with exposure ", exposure, ")"
         return
 
-
     print "processing file:  ", filename
 
 
@@ -69,17 +68,14 @@ def process(filename):
         unpack_header(filename, show=1)
         exit(0)
 
-    SUM += np.pad(arr_sum, (pixel_start, PIXELS-pixel_end), mode='constant', constant_values=0)
-    SSQ += np.pad(arr_ssq, (pixel_start, PIXELS-pixel_end), mode='constant', constant_values=0)
-    MAX += np.pad(arr_max, (pixel_start, PIXELS-pixel_end), mode='constant', constant_values=0)
-    SECOND += np.pad(arr_second, (pixel_start, PIXELS-pixel_end), mode='constant', constant_values=0)
+    SUM[pixel_start:pixel_end] += arr_sum
+    SSQ[pixel_start:pixel_end] += arr_ssq
+    MAX[pixel_start:pixel_end] += arr_max
+    SECOND[pixel_start:pixel_end] += arr_second
 
 def post():
     print "saving combined data to", OUTFILE
-
-    #dat = (csum,cssq,cnum)
-    np.savez(OUTFILE, sum=SUM, ssq=SSQ, max=MAX, second=SECOND, num=NUM, exposure=EXPOSURE, sens=SENS)
-
+    np.savez(OUTFILE, sum=SUM, ssq=SSQ, num=NUM, exposure=EXPOSURE, sens=SENS)
 
 if __name__ == "__main__":
     example_text = '''example:
