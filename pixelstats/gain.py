@@ -47,7 +47,7 @@ def process(filename, args):
     print "first_pixel:  ", first_pixel
     print "last_pixel:   ", last_pixel
 
-    version,header,sum,ssq = unpack_all(filename)     
+    version,header,sum,ssq,max = unpack_all(filename)     
 
     index = get_pixel_indices(header)
     images = interpret_header(header, "images")

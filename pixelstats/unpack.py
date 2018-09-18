@@ -22,16 +22,19 @@ def unpack_all(filename):
         print "reading data from ", num, " pixels."
         sum         = np.fromfile(f,dtype=">i4",count=num)
         ssq         = np.fromfile(f,dtype=">i8",count=num)
+        max         = np.fromfile(f,dtype=">i2",count=num)
+        second      = np.fromfile(f,dtype=">i2",count=num)
         print "num sum:  ", len(sum)
         print "num ssq:  ", len(ssq)
-        if ((num != len(ssq)) or (num != len(sum))):
+        print "num max:  ", len(max)
+        if num != len(ssq) or num != len(sum) or num != len(max):
             print "data format error... exiting."
             exit(0)
 
-        return version,header,sum,ssq
+        return version,header,sum,ssq,max,second
 
 def unpack_header(filename):
-    version,header,sum,ssq = unpack_all(filename)
+    version,header,sum,ssq,max,second = unpack_all(filename)
     return header
 
 def interpret_header(header, param):    

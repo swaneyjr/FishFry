@@ -20,10 +20,11 @@ EXPOSURE = 0
 
 SUM = np.array([])
 SSQ = np.array([])
+MAX = np.array([])
 NUM = np.array([])
 
 def process(filename):
-    global PIXELS, SENS, EXPOSURE, SUM, SSQ, NUM
+    global PIXELS, SENS, EXPOSURE, SUM, SSQ, MAX, SECOND, NUM
 
     if (CHECK_MAX > 0):
         match = re.search(r'run_([\d]+)_', filename)
@@ -31,7 +32,7 @@ def process(filename):
         if ((run < CHECK_MIN) or (run > CHECK_MAX)):
             return
 
-    version,header,arr_sum,arr_ssq = unpack_all(filename)
+    version,header,arr_sum,arr_ssq,arr_max,arr_second = unpack_all(filename)
 
     exposure = interpret_header(header,"exposure")
     sens     = interpret_header(header,"sens")
@@ -59,6 +60,8 @@ def process(filename):
         EXPOSURE = exposure
         SUM = np.zeros(PIXELS)
         SSQ = np.zeros(PIXELS)
+        MAX = np.zeros(PIXELS)
+        SECOND = np.zeros(PIXELS)
         NUM = images
 
     if exposure!=EXPOSURE or sens!=SENS:
@@ -68,12 +71,14 @@ def process(filename):
 
     SUM += np.pad(arr_sum, (pixel_start, PIXELS-pixel_end), mode='constant', constant_values=0)
     SSQ += np.pad(arr_ssq, (pixel_start, PIXELS-pixel_end), mode='constant', constant_values=0)
+    MAX += np.pad(arr_max, (pixel_start, PIXELS-pixel_end), mode='constant', constant_values=0)
+    SECOND += np.pad(arr_second, (pixel_start, PIXELS-pixel_end), mode='constant', constant_values=0)
 
 def post():
     print "saving combined data to", OUTFILE
 
     #dat = (csum,cssq,cnum)
-    np.savez(OUTFILE, sum=SUM, ssq=SSQ, num=NUM, exposure=EXPOSURE, sens=SENS)
+    np.savez(OUTFILE, sum=SUM, ssq=SSQ, max=MAX, second=SECOND, num=NUM, exposure=EXPOSURE, sens=SENS)
 
 
 if __name__ == "__main__":
