@@ -53,7 +53,7 @@ def get_pixel_indices(header):
     num = pixel_end - pixel_start;
     if (sample_step > 1):
             num = 1 + (num - 1) / sample_step
-    index = np.zeros(num)
+    index = np.zeros(num,dtype="int")
     for i in range(num):
         index[i] = pixel_start + i*sample_step
     return index

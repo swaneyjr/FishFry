@@ -119,6 +119,8 @@ def process(filename, args):
     plt.plot(ux,uy,".", color="blue")
     plt.xlabel("x position")
     plt.ylabel("y position")
+    plt.xlim(0,best_i)
+    plt.ylim(0,best_j)
     plt.savefig("plots/dark_pattern.pdf")
     plt.show()
 

@@ -35,15 +35,6 @@ def calculate(args):
     gain       = gains['gain']
     intercept  = gains['intercept']
 
-    # load the hot cell list:
-    #try:
-    #    filename = "calib/hot.npz"
-    #    hots  = np.load(filename);
-    #except:
-    #    print "could not process file ", filename, " as .npz file.  Run gain.py with --commit option first?"
-    #    return
-    #hot       = hots['hot_list']
-
     keep = np.isfinite(gain) & np.isfinite(intercept) 
 
     if (args.no_dark):
@@ -60,9 +51,11 @@ def calculate(args):
             hots  = np.load(filename);
         except:
             print "could not process file ", filename, " as .npz file."
-            return
-        #hot = hots['hot_list']
-        #keep = keep & (all_dark == False)
+            return        
+        hot = hots['hot_list']
+        all_hot = np.full(width*height, False)
+        all_hot[hot] = True;
+        keep = keep & (all_hot == False)
 
     # position for down sampling by 8x8 
     ds = args.down_sample
@@ -122,7 +115,7 @@ if __name__ == "__main__":
     parser.add_argument('--no_dark',action="store_true", help="exclude dark pixels from analysis.")
     parser.add_argument('--no_hot',action="store_true", help="exclude hot pixels from analysis.")
     parser.add_argument('--short',action="store_true", help="short (test) analysis of a few pixels.")
-    parser.add_argument('--down_sample',  type=int, default=8,help="down sampling amount.")
+    parser.add_argument('--down_sample',  metavar="DOWN", type=int, default=8,help="down sample by amount DOWN.")
     parser.add_argument('--max_gain',  type=float, default=10,help="minimum gain for plot.")
     parser.add_argument('--min_gain',  type=float, default=0,help="maximum gain for plot.")
     parser.add_argument('--plot_only',action="store_true", help="load and plot previous results.")
