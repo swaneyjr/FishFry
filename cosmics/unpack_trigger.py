@@ -62,7 +62,7 @@ def unpack_all(filename):
         return header,px,py,highest,region,timestamp,millistamp,images,dropped
 
 def unpack_header(filename):
-    header,px,py,highest,region,images,dropped = unpack_all(filename)
+    header,px,py,highest,region,timestamp,millistamp,images,dropped = unpack_all(filename)
     return header
 
 def interpret_header(header, param):    

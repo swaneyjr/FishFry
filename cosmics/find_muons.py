@@ -10,12 +10,16 @@ import matplotlib.pyplot as plt
 from unpack_trigger import *
 from calibrate import *
 
-all_time = np.array([])
-all_trig = np.array([])
+import ROOT as r
 
+all_time = np.array([])
+all_trig = np.array([], dtype=int)
+all_x = np.array([], dtype=int)
+all_y = np.array([], dtype=int)
 
 def process(filename,args):
-    global all_time, all_trig, first_time
+
+    global all_time, all_trig, all_x, all_y
     header,px,py,highest,region,timestamp,millistamp,images,dropped = unpack_all(filename)
 
     try:
@@ -46,12 +50,15 @@ def process(filename,args):
 
     keep = ((highest==prescale.size) & (hot == False))
     
+
     all_time = np.append(all_time, millistamp[keep]*1E-3)
     all_trig = np.append(all_trig,region[keep,icenter])
+    all_x = np.append(all_x, px)
+    all_y = np.append(all_y, py)
     
 
 def analysis(args):
-    global all_trig, all_time, first_time
+    global all_trig, all_time, all_x, all_y
     h,bins = np.histogram(np.clip(all_trig,0,500), bins=500, range=(0,500))
     cbins = 0.5*(bins[:-1] + bins[1:])
     plt.plot(cbins,h,"bo")
@@ -59,7 +66,7 @@ def analysis(args):
     plt.show()
 
    
-    time = np.unique(all_time[all_trig > 100])
+    time = np.unique(all_time)
     rate = time.size/time[-1]
 
     print "rate:  ", rate
@@ -67,10 +74,7 @@ def analysis(args):
     print "minimum time:  ", np.min(time)
     print "maximum time:  ", np.max(time)
     print "start date:    ", datetime.datetime.fromtimestamp(np.min(time))
-    print "end date:      ", datetime.datetime.fromtimestamp(np.max(time))
-
-
-    np.savez("muon.npz", time=time)
+    print "end date:      ", datetime.datetime.fromtimestamp(np.max(time)) 
 
 
 
@@ -85,10 +89,41 @@ if __name__ == "__main__":
     parser.add_argument('--sandbox',action="store_true", help="run sandbox code and exit (for development).")
     #parser.add_argument('--calib',action="store_true", help="compare calibrated pixel values.")
     parser.add_argument('--max',  type=int, default=50,help="maximum pixel value in rate plot (x-axis).")
-    args = parser.parse_args()
+    parser.add_argument('--out', default='phone.root', help='name of output ROOT file')
+    args = parser.parse_args() 
 
     for filename in args.trig:
         print "processing trigger file:  ", filename
         process(filename, args)
 
     analysis(args)
+
+    f = r.TFile(args.out, 'recreate')
+    trigs = r.TTree('triggers', 'Triggered events')
+
+    times = np.array([all_time.min()])
+    x = r.vector('UInt_t')()
+    y = r.vector('UInt_t')()
+    val = r.vector('UInt_t')()
+
+    trigs.Branch('t', times, 't/D')
+    trigs.Branch('x', x)
+    trigs.Branch('y', y)
+    trigs.Branch('val', val)
+
+    for i in np.argsort(all_time):
+        if all_time[i] > times[0]:
+            trigs.Fill()
+            x.clear()
+            y.clear()
+            val.clear()
+            times[0] = all_time[i]
+        
+        x.push_back(all_x[i])
+        y.push_back(all_y[i])
+        val.push_back(all_trig[i])
+
+    trigs.Fill()
+
+    f.Write()
+    f.Close()
