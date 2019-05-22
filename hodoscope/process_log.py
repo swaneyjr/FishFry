@@ -141,9 +141,9 @@ def process(filename,args):
     ard_heartbeat -= bounces
 
     # check for duplicates:
-    print "duplicates in channel a:  ", a_ard[a_ard[1:] == a_ard[:-1]]
-    print "duplicates in channel b:  ", b_ard[b_ard[1:] == b_ard[:-1]]
-    print "duplicates in channel c:  ", c_ard[c_ard[1:] == c_ard[:-1]]
+    print "duplicates in channel a:  ", a_ard[:-1][a_ard[1:] == a_ard[:-1]]
+    print "duplicates in channel b:  ", b_ard[:-1][b_ard[1:] == b_ard[:-1]]
+    print "duplicates in channel c:  ", c_ard[:-1][c_ard[1:] == c_ard[:-1]]
 
     # remove duplicates:
     a_ard = np.unique(a_ard)

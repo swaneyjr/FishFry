@@ -31,7 +31,8 @@ if __name__ == '__main__':
 
     print "Triggered: %d / %d" % (len(triggered), len(total))
 
-    bins = range(27, 30) + range(30, 50, 5) + range(50, 100, 10) + range(100, 400, 20) 
+    bins = 2 * np.arange(15) ** 2 + 26
+    #bins = range(27, 30) + range(30, 60, 10) + range(60, 160, 20) + range(160, 400, 40) 
     trig_hist, bins = np.histogram(triggered, bins)
     tot_hist, bins = np.histogram(total, bins)
 
@@ -51,6 +52,7 @@ if __name__ == '__main__':
     frac = (1.0 * trig_hist / tot_hist - prob_noise) / (1 - prob_noise) / geom
     
     plt.errorbar(bins[1:], frac, yerr=frac*np.sqrt(1./trig_hist + 1./tot_hist), fmt='o')
+    plt.semilogx()
     plt.xlabel('Calibrated ADC counts')
     plt.ylabel('signal / total')
     plt.title('Signal fraction by max values')
