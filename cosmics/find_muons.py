@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import sys
 import argparse
@@ -13,30 +13,35 @@ from calibrate import *
 import ROOT as r
 
 all_time = np.array([])
-all_trig = np.array([], dtype=int)
-all_x = np.array([], dtype=int)
-all_y = np.array([], dtype=int)
+all_trig = np.array([]).astype(int)
+all_x = np.array([]).astype(int)
+all_y = np.array([]).astype(int)
+
+width = None
+height = None
 
 def process(filename,args):
 
     global all_time, all_trig, all_x, all_y
+    global width, height
     header,px,py,highest,region,timestamp,millistamp,images,dropped = unpack_all(filename)
 
     try:
         filename = "calib/hot.npz"
         hots  = np.load(filename);
     except:
-        print "could not process file ", filename, " as .npz file."
+        print("could not process file ", filename, " as .npz file.")
         return        
     hot_list = hots['hot']
 
-    width  = interpret_header(header, "width")
-    height = interpret_header(header, "height")
+    if not width or not height:
+        width  = interpret_header(header, "width")
+        height = interpret_header(header, "height")
 
     dx = interpret_header(header,"region_dx")
     dy = interpret_header(header,"region_dy")
-    region = calibrate_region(px,py,region,dx,dy)
-    icenter = (2*dx + 1)*(2*dy + 1)/2
+    region = calibrate_region(px,py,region,dx,dy,width,height)
+    icenter = (2*dx + 1)*(2*dy + 1)//2
    
     threshold,prescale = get_trigger(header)
 
@@ -44,8 +49,10 @@ def process(filename,args):
     hot = np.in1d(index, hot_list)
 
     keep = (highest==prescale.size)
-    print "found ", np.sum(hot[keep]), " hot regions."
-    print "found ", np.sum(hot[keep] == False), " non-hot regions."
+    
+    if args.verbose:
+        print("found ", np.sum(hot[keep]), " hot regions.")
+        print("found ", np.sum(hot[keep] == False), " non-hot regions.")
 
 
     keep = ((highest==prescale.size) & (hot == False))
@@ -55,7 +62,7 @@ def process(filename,args):
     all_trig = np.append(all_trig,region[keep,icenter])
     all_x = np.append(all_x, px)
     all_y = np.append(all_y, py)
-    
+
 
 def analysis(args):
     global all_trig, all_time, all_x, all_y
@@ -69,12 +76,14 @@ def analysis(args):
     time = np.unique(all_time)
     rate = time.size/time[-1]
 
-    print "rate:  ", rate
+    print()
 
-    print "minimum time:  ", np.min(time)
-    print "maximum time:  ", np.max(time)
-    print "start date:    ", datetime.datetime.fromtimestamp(np.min(time))
-    print "end date:      ", datetime.datetime.fromtimestamp(np.max(time)) 
+    print("rate:  ", rate)
+
+    print("minimum time:  ", np.min(time))
+    print("maximum time:  ", np.max(time))
+    print("start date:    ", datetime.datetime.fromtimestamp(np.min(time)))
+    print("end date:      ", datetime.datetime.fromtimestamp(np.max(time)))
 
 
 
@@ -90,10 +99,13 @@ if __name__ == "__main__":
     #parser.add_argument('--calib',action="store_true", help="compare calibrated pixel values.")
     parser.add_argument('--max',  type=int, default=50,help="maximum pixel value in rate plot (x-axis).")
     parser.add_argument('--out', default='phone.root', help='name of output ROOT file')
+    parser.add_argument('-v', '--verbose', action='store_true', help='enable verbose output')
     args = parser.parse_args() 
 
+    end = "\n" if args.verbose else "\r"
+
     for filename in args.trig:
-        print "processing trigger file:  ", filename
+        print("processing trigger file:  ", filename, end=end)
         process(filename, args)
 
     analysis(args)
@@ -119,9 +131,9 @@ if __name__ == "__main__":
             val.clear()
             times[0] = all_time[i]
         
-        x.push_back(all_x[i])
-        y.push_back(all_y[i])
-        val.push_back(all_trig[i])
+        x.push_back(int(all_x[i]))
+        y.push_back(int(all_y[i]))
+        val.push_back(int(all_trig[i]))
 
     trigs.Fill()
 

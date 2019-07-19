@@ -36,7 +36,7 @@ def unpack_all(filename):
         millistamp = np.array([],dtype="u4")
         dropped = 0
         images = 0
-        while(1):
+        while(True):
             ts = np.fromfile(f,dtype=">i8",count=1)[0]
             if (ts == 0):
                 break;
@@ -49,7 +49,7 @@ def unpack_all(filename):
             px_mask     = ((index%region_buffer) == 0)
             py_mask     = ((index%region_buffer) == 1)
             h_mask     = ((index%region_buffer) == 2)
-            region_mask = (px_mask == False) & (py_mask == False) & (h_mask == False)
+            region_mask = np.logical_not(px_mask | py_mask | h_mask)
             px      = np.append(px, region_data[px_mask])
             py      = np.append(py, region_data[py_mask])
             highest = np.append(highest, region_data[h_mask])
@@ -69,7 +69,7 @@ def interpret_header(header, param):
     if param in header_map:
         return header[header_map[param]]
     else:
-        print "ERROR:  invalid parameter ", param
+        print("ERROR:  invalid parameter ", param)
         exit(0)
 
 def get_trigger(header):
@@ -82,22 +82,22 @@ def show_header(header):
     num_thresh = interpret_header(header, "num_thresh")
     denom      = interpret_header(header, "denom")
     hsize       = header.size-2*num_thresh
-    print "additional header size:         ", hsize-1
-    print "version:                        ", interpret_header(header, "version")
-    print "width:                          ", interpret_header(header, "width")
-    print "height:                         ", interpret_header(header, "height")
-    print "sensitivity:                    ", interpret_header(header, "sens")
-    print "exposure:                       ", interpret_header(header, "exposure")
-    print "hot_hash:                       ", interpret_header(header, "hot_hash")
-    print "wgt_hash:                       ", interpret_header(header, "wgt_hash")
-    print "region_dx:                      ", interpret_header(header, "region_dx")
-    print "region_dy:                      ", interpret_header(header, "region_dy")
-    print "denom:                          ", interpret_header(header, "denom")
-    print "num_zerobias:                   ", interpret_header(header, "num_zerobias")
-    print "num_thresh:                     ", num_thresh
     threshold, prescale = get_trigger(header)
-    print "thresholds:                     ", threshold
-    print "prescales:                      ", prescale
+    print("additional header size:  ", hsize-1)
+    print("version:                 ", interpret_header(header, "version"))
+    print("width:                   ", interpret_header(header, "width"))
+    print("height:                  ", interpret_header(header, "height"))
+    print("sensitivity:             ", interpret_header(header, "sens"))
+    print("exposure:                ", interpret_header(header, "exposure"))
+    print("hot_hash:                ", interpret_header(header, "hot_hash"))
+    print("wgt_hash:                ", interpret_header(header, "wgt_hash"))
+    print("region_dx:               ", interpret_header(header, "region_dx"))
+    print("region_dy:               ", interpret_header(header, "region_dy"))
+    print("denom:                   ", interpret_header(header, "denom"))
+    print("num_zerobias:            ", interpret_header(header, "num_zerobias"))
+    print("num_thresh:              ", num_thresh) 
+    print("thresholds:              ", threshold)
+    print("prescales:               ", prescale)
  
     
 

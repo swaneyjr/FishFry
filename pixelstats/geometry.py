@@ -16,7 +16,17 @@ def down_sample(width, height, dsx, dsy):
 
     return down, nx, ny
 
-
+def load_res()    
+    # load the image geometry:
+    try:
+        geom = np.load("calib/res.npz");
+    except:
+        print "calib/res.npz does not exist.  Use dump_header.py --res"
+        exit(1)
+    width  = geom["width"]
+    height = geom["height"]
+    
+    return width, height
 
 if __name__ == "__main__":
     print "testing geometry utilities:  "

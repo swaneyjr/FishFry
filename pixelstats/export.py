@@ -7,18 +7,11 @@ from matplotlib.colors import LogNorm
 
 import argparse
 
-from geometry import *
+from geometry import load_res, down_sample
 
 def analysis(args):
 
-    # load the image geometry:
-    try:
-        geom = np.load("calib/geometry.npz");
-    except:
-        print "calib/geometry.npz does not exist.  Use dump_header.py --geometry"
-        return
-    width  = geom["width"]
-    height = geom["height"]
+    width, height = load_res()
 
     # load the lens shading map:
     try:

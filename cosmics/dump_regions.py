@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#!/usr/bin/env python3
 
 # dump a header from run data
 
@@ -8,6 +8,9 @@ import datetime
 
 from unpack_trigger import *
 from calibrate import *
+
+width = None
+height = None
 
 def process(filename,args):
     header,px,py,highest,region,timestamp,millistamp,images,dropped = unpack_all(filename)
@@ -23,22 +26,23 @@ def process(filename,args):
             duration = 0
         dead     = (duration - exposure) / duration
 
-        print "images:              ", images
-        print "first image:         ", tmin, " -> ", datetime.datetime.fromtimestamp(tmin*1E-3)    
-        print "last image:          ", tmax, " -> ", datetime.datetime.fromtimestamp(tmax*1E-3)     
-        print "interval (s):        ", elapsed  
-        print "frame duration (s):  ", duration
-        print "exposure (s):        ", exposure
-        print "deadtime frac:       ", dead
+        print("images:              ", images)
+        print("first image:         ", tmin, " -> ", datetime.datetime.fromtimestamp(tmin*1E-3))   
+        print("last image:          ", tmax, " -> ", datetime.datetime.fromtimestamp(tmax*1E-3))
+        print("interval (s):        ", elapsed)
+        print("frame duration (s):  ", duration)
+        print("exposure (s):        ", exposure)
+        print("deadtime frac:       ", dead)
         return
 
-
-
-
     if (args.calib):
+        if not width or not height:
+            width = interpret_header(header,"width")
+            height = interpret_header(header,"height")
+
         dx = interpret_header(header,"region_dx")
         dy = interpret_header(header,"region_dy")
-        region = calibrate_region(px,py,region,dx,dy)
+        region = calibrate_region(px,py,region,dx,dy,width,height)
 
     num_region = region.shape[0]
     count = 0
@@ -48,21 +52,21 @@ def process(filename,args):
             continue
         if (args.zerobias and (h!=0)):
             continue
-        print "timestamp:    ", timestamp[i]
-        print "millistamp:   ", millistamp[i], " -> ", datetime.datetime.fromtimestamp(millistamp[i]*1E-3)
-        print "px:           ", px[i]
-        print "py:           ", py[i]
-        print "highest:      ", h
-        print "region:       ", region[i]
+        print("timestamp:    ", timestamp[i]))
+        print("millistamp:   ", millistamp[i], " -> ", datetime.datetime.fromtimestamp(millistamp[i]*1E-3))
+        print("px:           ", px[i])
+        print("py:           ", py[i])
+        print("highest:      ", h)
+        print("region:       ", region[i])
         count += 1
         if (args.short):
             if (count >= 100):
                 break
 
-    print "images:                   ", images
-    print "total number of regions:  ", num_region
-    print "regions shown:            ", count
-    print "total dropped triggers:   ", dropped
+    print("images:                   ", images)
+    print("total number of regions:  ", num_region)
+    print("regions shown:            ", count)
+    print("total dropped triggers:   ", dropped)
     
     
 if __name__ == "__main__":
@@ -81,7 +85,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     for filename in args.files:
-        print "processing file:  ", filename
+        print("processing file:  ", filename)
         process(filename, args)
 
         

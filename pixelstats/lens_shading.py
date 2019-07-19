@@ -7,20 +7,15 @@ from matplotlib.colors import LogNorm
 
 import argparse
 
-from geometry import *
+from geometry import load_res, down_sample
 
 FILE_NAME = "calib/lens.npz"
 
 def calculate(args):
 
     # load the image geometry:
-    try:
-        geom = np.load("calib/geometry.npz");
-    except:
-        print "calib/geometry.npz does not exist.  Use dump_header.py --geometry"
-        return
-    width  = geom["width"]
-    height = geom["height"]
+    width, height = load_res()
+
     index  = np.arange(width*height,dtype=int)
     xpos = index % width
     ypos = index / width

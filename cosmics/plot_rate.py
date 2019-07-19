@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import sys
 from unpack_hist import *
@@ -19,19 +19,19 @@ def process(filename, args):
     if (args.txtdump):
         show_header(header)
         hist_prescale = interpret_header(header, "hist_prescale")    
-        print "images:         ", images
-        print "width:          ", width
-        print "height:         ", height
-        print "hist_prescale:  ", hist_prescale
-        print "max entries:    ", images * width * height / hist_prescale
-        print "buffer size:    ", 2**31    
-        print "sum of entries, uncal:  ", np.sum(hist_uncal)
-        print "sum of entries, nohot:  ", np.sum(hist_nohot)
-        print "sum of entries, calib:  ", np.sum(hist_calib)
+        print("images:         ", images)
+        print("width:          ", width)
+        print("height:         ", height)
+        print("hist_prescale:  ", hist_prescale)
+        print("max entries:    ", images * width * height / hist_prescale)
+        print("buffer size:    ", 2**31)
+        print("sum of entries, uncal:  ", np.sum(hist_uncal))
+        print("sum of entries, nohot:  ", np.sum(hist_nohot))
+        print("sum of entries, calib:  ", np.sum(hist_calib))
 
-        print hist_uncal[0:100]
-        print hist_nohot[0:100]
-        print hist_calib[0:100]
+        print(hist_uncal[:100])
+        print(hist_nohot[:100])
+        print(hist_calib[:100])
         return
 
     cbins = np.arange(0,hist_uncal.size) 
@@ -71,7 +71,7 @@ def process(filename, args):
         prescale = 1;
         for i in np.arange(rate_inc.size,0,-1)-1:
             while (rate_inc[i] >= args.num*prescale):
-                print "prescale: ", prescale, "threshold: ", i
+                print("prescale: ", prescale, "threshold: ", i)
                 prescale *= 8
         return
     
@@ -104,7 +104,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     for filename in args.files:
-        print "processing file:  ", filename
+        print("processing file:  ", filename)
         process(filename, args)
 
 

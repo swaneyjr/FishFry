@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import numpy as np
 import ROOT as r
@@ -44,7 +44,7 @@ def calibrate_drifts(th, tp, tlim=120):
     starts = tp[np.argwhere(np.diff(tp) > 15000).flatten() + 1]
     starts = np.append(tp[0], starts)
 
-    for s in xrange(starts.size):
+    for s in range(starts.size):
         alltimes = []
         alldiffs = []
         
@@ -53,7 +53,7 @@ def calibrate_drifts(th, tp, tlim=120):
         else:
             th_s = th[th >= starts[s] - tlim]
 
-        for i in xrange(th_s.size):
+        for i in range(th_s.size):
         
             diffs = tp - th_s[i]
             diffs = diffs[np.abs(diffs) < tlim]
@@ -82,10 +82,10 @@ def calibrate_drifts(th, tp, tlim=120):
 
         #TODO: can we do something fancier here?
         max_bin = np.argmax(hist)
-        peak_offset = offset_space[max_bin / offset_bins]
+        peak_offset = offset_space[max_bin // offset_bins]
         peak_slope = slope_space[max_bin % slope_bins]
 
-        print "Peak at %.1E, %.1E" % (peak_offset, peak_slope)
+        print("Peak at {0:.1E}, {1:.1E}".format(peak_offset, peak_slope))
 
         plt.figure(1)
         plt.hist2d(offsets, 3600*slopes, bins=(np.linspace(-2, 2, 101), 3600*np.linspace(slope_min, slope_max)))
@@ -128,7 +128,7 @@ if __name__ == '__main__':
     try:
         drifts = np.load('calib/drifts.npz')
     except IOError:
-        print "No time drift calibration found. Use the --calibrate flag"
+        print("No time drift calibration found. Use the --calibrate flag")
         exit()
     
     f = r.TFile(args.out, 'RECREATE')

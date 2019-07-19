@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import numpy as np
 import ROOT as r
@@ -13,7 +13,7 @@ def find_cut(t0, trig_times, cutoff=50):
     plt.xlabel(r'$\Delta t$')
     plt.show()
     
-    tolerance = float(raw_input("Tolerance: "))
+    tolerance = float(input("Tolerance: "))
 
     return tolerance
 
@@ -23,10 +23,12 @@ def add_triggered(t0, hodo_times, tolerance=1):
 
     dt = np.sort(np.diff(np.sort(hodo_times)))
     hodo_rate = 1.0 * dt.size / dt.sum()
+    hodo_rate_err = np.sqrt(dt.size) / dt.sum()
 
     user_info = t1.GetUserInfo()
     user_info.Add(r.TParameter('Double_t')('tolerance', tolerance))
     user_info.Add(r.TParameter('Double_t')('hodo_rate', hodo_rate))
+    user_info.Add(r.TParameter('Double_t')('hodo_rate_err', hodo_rate_err))
 
     triggered = np.zeros(1, dtype=bool)
     t1.Branch('triggered', triggered, 'triggered/O') 
@@ -38,8 +40,8 @@ def add_triggered(t0, hodo_times, tolerance=1):
         trigs += triggered[0]
         t1.Fill()
 
-    print "Finished!"
-    print "%d / %d triggers found" % (trigs, t0.GetEntries())
+    print("Finished!")
+    print("{} / {} triggers found".format(trigs, t0.GetEntries()))
 
     return t1
 
@@ -58,8 +60,8 @@ if __name__ == '__main__':
 
     pbranches = [b.GetName() for b in t0.GetListOfBranches()]
     if not 't_adj' in pbranches:
-        print "ERROR: time corrections not yet set."
-        print "First, use correct_timestamps.py"
+        print("ERROR: time corrections not yet set.")
+        print("First, use correct_timestamps.py")
         exit()
 
     hfile = np.load(args.hfile)
@@ -69,6 +71,6 @@ if __name__ == '__main__':
     t1 = add_triggered(t0, htimes, find_cut(t0, htimes)) 
 
     outfile.Write()
-    print "Wrote to %s" % args.out
+    print("Wrote to", args.out)
     outfile.Close()
     

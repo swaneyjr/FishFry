@@ -55,7 +55,7 @@ def process_trig(filename,args,ref_bins, ref_hist, ref_err):
     if (args.calib):
         dx = trigger.interpret_header(header,"region_dx")
         dy = trigger.interpret_header(header,"region_dy")
-        region = calibrate_region(px,py,region,dx,dy)
+        region = calibrate_region(px,py,region,dx,dy,width,height)
    
 
 

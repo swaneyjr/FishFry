@@ -5,6 +5,8 @@ from unpack import *
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 
+from geometry import load_res
+
 import argparse
 
 def process(filename, args):
@@ -25,13 +27,7 @@ def process(filename, args):
          height = interpret_header(header, "height")
     else:
         # load the image geometry from the calibrations:
-        try:
-            geom = np.load("calib/geometry.npz");
-        except:
-            print "calib/geometry.npz does not exist.  Use dump_header.py --geometry"
-            return
-        width  = geom["width"]
-        height = geom["height"]
+        width, height = load_res()
 
         try:
             npz = np.load(filename)
