@@ -75,7 +75,7 @@ def process(filename):
 
 def post():
     print "saving combined data to", OUTFILE
-    np.savez(OUTFILE, sum=SUM, ssq=SSQ, num=NUM, exposure=EXPOSURE, sens=SENS)
+    np.savez(OUTFILE, sum=SUM, ssq=SSQ, max=MAX, second=SECOND, num=NUM, exposure=EXPOSURE, sens=SENS)
 
 if __name__ == "__main__":
     example_text = '''example:
