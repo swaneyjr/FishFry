@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 
-
 import numpy as np
 import random
 from scipy.optimize import brentq
+
+import os
+import sys
+sys.path.insert(1, '../pixelstats')
+from geometry import load_res
 
 # in Hz*mm^-2
 muon_flux = 1/(60*100)
@@ -55,10 +59,10 @@ def monte_carlo(n, lyso_x, lyso_y, cmos_x, cmos_y, start_gap, end_gap, rot=False
 if __name__ == '__main__':
     from argparse import ArgumentParser
     parser = ArgumentParser(description='Find relevant geometrical acceptance factors')
+    parser.add_argument('--calib', default='calib', help='calibration directory')
     parser.add_argument('--lyso_dims', required=True, nargs=2, type=float, help='"x y" in mm, separated by spaces')
     parser.add_argument('--gap', required=True, type=float, nargs="+", help='Separation between CMOS and LYSO crystals in mm.  Either a single argument for both or two arguments for top and bottom.')
     parser.add_argument('--rot', action='store_true', help='The bottom scintillator is rotated 90 degrees about the z axis with respect to the top and the CMOS')
-    parser.add_argument('--res', required=True, nargs=2, type=int, help='x and y resolution of the CMOS')
     parser.add_argument('--pix_size', type=float, default='1.1', help='Side length of a pixel in um')
     parser.add_argument('--n', type=int, default=10000, help='Number of particles to sample')
     parser.add_argument('--eff', type=float, default=1., help='Efficiency of each scintillator/PMT')
@@ -67,7 +71,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     lyso_dims = np.array(args.lyso_dims)
-    cmos_size = args.pix_size/1000 * np.array(args.res)
+    cmos_size = args.pix_size/1000 * np.array(load_res(args.calib))
 
     if len(args.gap) == 1:
         gaps = np.array([args.gap, args.gap])
@@ -85,10 +89,10 @@ if __name__ == '__main__':
     p_hgp = args.eff**2 * p_pgh * hodo_acceptance * np.product(lyso_dims) / np.product(cmos_size)
     p_hgp_err = p_hgp * hodo_acceptance * (p_pgh_err / p_pgh)
 
-    np.savez('calib/geometry.npz', \
-            p_pgh = p_pgh, \
-            p_pgh_err = p_pgh_err, \
-            p_hgp = p_hgp, \
-            p_hgp_err = p_hgp_err, \
+    np.savez(os.path.join(args.calib, 'geometry.npz'), 
+            p_pgh = p_pgh,
+            p_pgh_err = p_pgh_err, 
+            p_hgp = p_hgp,
+            p_hgp_err = p_hgp_err,
             rate = args.eff**2 * hodo_acceptance * muon_flux * np.product(lyso_dims))
 

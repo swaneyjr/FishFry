@@ -1,6 +1,7 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
 import numpy as np
+import os
 
 def down_sample(width, height, dsx, dsy):
     ex = 0
@@ -16,12 +17,12 @@ def down_sample(width, height, dsx, dsy):
 
     return down, nx, ny
 
-def load_res()    
+def load_res(calib_dir): 
     # load the image geometry:
     try:
-        geom = np.load("calib/res.npz");
+        geom = np.load(os.path.join(calib_dir, "res.npz"))
     except:
-        print "calib/res.npz does not exist.  Use dump_header.py --res"
+        print("res.npz not found.  Use dump_header.py")
         exit(1)
     width  = geom["width"]
     height = geom["height"]
@@ -29,7 +30,7 @@ def load_res()
     return width, height
 
 if __name__ == "__main__":
-    print "testing geometry utilities:  "
+    print("testing geometry utilities:  ")
 
     width = 20
     height = 20
@@ -38,12 +39,12 @@ if __name__ == "__main__":
 
     down, nx, ny = down_sample(width, height, dsx, dsy)
 
-    print "min:  ", np.min(down)  
-    print "max:  ", np.max(down)
-    print "size: ", nx*ny
+    print("min:  ", np.min(down))
+    print("max:  ", np.max(down))
+    print("size: ", nx*ny)
     
     for i in range(height):
-        print down[i*width:(i+1)*width]
+        print(down[i*width:(i+1)*width])
 
     width = 5328
     height = 3000
@@ -52,18 +53,9 @@ if __name__ == "__main__":
 
     down, nx, ny = down_sample(width, height, dsx, dsy)
 
-    print "min:  ", np.min(down)  
-    print "max:  ", np.max(down)
-    print "size: ", nx*ny
+    print("min:  ", np.min(down))
+    print("max:  ", np.max(down))
+    print("size: ", nx*ny)
     
-    print 5328 / 8
-    for i in range(1,10):
-        print down[i*5328-18:i*5328]
     
-
-
-
-
-
-
 

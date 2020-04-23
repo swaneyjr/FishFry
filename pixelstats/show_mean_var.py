@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import sys
+import os
 from unpack import *
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
@@ -18,7 +19,7 @@ def process(filename, args):
 
     # load data, from either raw file directly from phone, or as output from combine.py utility:
 
-    if (args.raw):
+    if args.raw:
          version,header,sum,ssq = unpack_all(filename)
          index = get_pixel_indices(header)
          images = interpret_header(header, "images")
@@ -27,12 +28,12 @@ def process(filename, args):
          height = interpret_header(header, "height")
     else:
         # load the image geometry from the calibrations:
-        width, height = load_res()
+        width, height = load_res(args.calib)
 
         try:
             npz = np.load(filename)
         except:
-            print "could not process file ", filename, " as .npz file.  Use --raw option?"
+            print("could not process file ", filename, " as .npz file.  Use --raw option?")
             return
 
         exposure = npz['exposure']
@@ -56,21 +57,22 @@ def process(filename, args):
 
     if (args.no_dark or args.all_dark):
         try:
-            all_dark = np.load("calib/all_dark.npy")            
+            filename = os.path.join(args.calib, 'all_dark.npy')
+            all_dark = np.load(filename)
         except:
-            print "dark pixel file calib/all_dark.npy does not exist."
+            print("dark pixel file", filename, "does not exist.")
             return
 
         new_dark = [all_dark[i] for i in index]
-        print new_dark[:10]
-        print len(new_dark)
-        print num.size
+        print(new_dark[:10])
+        print(len(new_dark))
+        print(num.size)
 
         all_dark = np.array(new_dark)
         
-        if (args.no_dark):
+        if args.no_dark:
             keep = keep * (all_dark == False)
-        if (args.all_dark):
+        if args.all_dark:
             keep = keep * (all_dark == True)
 
     if (args.filter >= 0):
@@ -85,9 +87,10 @@ def process(filename, args):
 
     if (args.gain):
         try:
-            lens = np.load("calib/lens.npz")            
+            filename = os.path.join(args.calib, 'lens.npz')
+            lens = np.load(filename)            
         except:
-            print "average gain file calib/avg_gain.npz does not exist."
+            print("average gain file", filename, "does not exist.")
             return
         avg_gain = lens['avg_gain']
         gain = np.array([avg_gain[i] for i in index])
@@ -102,22 +105,22 @@ def process(filename, args):
     ypos  = ypos[keep]
 
     if (args.sandbox):
-        print "running development code."
+        print("running development code.")
         return
 
-    if (args.hot != None):
+    if args.hot:
         max_mean = args.hot[0]
         max_vari  = args.hot[1]
-        print "saving hot pixel list from mean > ", max_mean, " or var > ", max_vari;
+        print("saving hot pixel list from mean > ", max_mean, " or var > ", max_vari)
         hot = ((cmean > max_mean) + (cvari > max_vari))
         hot_list = index[hot]
-        HOT_FILE = "calib/hot.npz";
-        print "saving  ", hot_list.size, "hot pixels to file ", HOT_FILE;
-        print "total pixels in device:  ", width * height
-        frac = float(hot_list.size) / float(width*height)
-        print "faction of hot pixels:  ", frac
+        hotfile = os.path.join(args.calib, "hot_online.npz")
+        print("saving  ", hot_list.size, "hot pixels to file ", hotfile)
+        print("total pixels in device:  ", width * height)
+        frac = hot_list.size / (width*height)
+        print("faction of hot pixels:  ", frac)
 
-        np.savez(HOT_FILE, hot_list=hot_list)
+        np.savez(hotfile, hot_list=hot_list)
 
         keep = (hot == False)
         cmean = cmean[keep]
@@ -137,7 +140,7 @@ def process(filename, args):
         plt.hist2d(cmean,cvari,norm=LogNorm(),bins=[500,500],range=[[0,args.max_mean],[0,args.max_var]])
         plt.xlabel("mean")
         plt.ylabel("variance")
-        print "saving plot to file:  ", plot_name
+        print("saving plot to file:  ", plot_name)
         plt.savefig(plot_name)
         plt.show()
 
@@ -247,10 +250,12 @@ if __name__ == "__main__":
     parser.add_argument('--by_radius',action="store_true", help="produce 4 plots at three different locations from radius.")
     parser.add_argument('--gain',action="store_true", help="apply gain correction.")
     parser.add_argument('--hot', nargs=2, metavar=("MEAN","VAR"), type=float,help="save list of pixels where mean > MEAN or var > VAR")
+    parser.add_argument('--calib', default='calib', help='directory with calibration files')
+    
     args = parser.parse_args()
 
     for filename in args.files:
-        print "processing file:  ", filename
+        print("processing file:  ", filename)
         process(filename, args)
 
 

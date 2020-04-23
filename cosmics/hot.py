@@ -30,7 +30,7 @@ def process(filename,args):
 
     dx = interpret_header(header,"region_dx")
     dy = interpret_header(header,"region_dy")
-    region = calibrate_region(px,py,region,dx,dy,width,height)
+    region = calibrate_region(px,py,region,dx,dy,width,height,args.calib)
     icenter = ((2*dx + 1)*(2*dy+1)) // 2
 
     num_region = region.shape[0]
@@ -53,7 +53,7 @@ def analysis(args):
 
     if (args.commit):
         print("saving ", hot.size, " hot pixels to file.")
-        np.savez("calib/hot.npz", hot=hot)
+        np.savez("calib/hot_offline.npz", hot_list=hot)
 
     
 if __name__ == "__main__":
@@ -65,6 +65,7 @@ if __name__ == "__main__":
     parser.add_argument('files', metavar='FILE', nargs='+', help='file to process')
     parser.add_argument('--sandbox',action="store_true", help="run trial code")
     parser.add_argument('--thresh',  type=float, default=27,help="calibrated threshold for occupancy count")
+    parser.add_argument('--calib', default='calib',help='Location of calibration directory')
     parser.add_argument('--commit',action="store_true", help="save hot pixels to file.")
     parser.add_argument('--verbose', action="store_true", help="display file summary")
 

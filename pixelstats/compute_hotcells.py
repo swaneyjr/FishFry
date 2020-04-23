@@ -3,25 +3,28 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
 from argparse import ArgumentParser
 import numpy as np
+import os
 
+from geometry import load_res
 
-def export(hot_cells):
+def export(hot_cells, outfile):
     print('exporting hotcells as .npz file')
     flat_hotcell_list = hot_cells.flatten()
-    np.savez('calib/hot.npz', hot_list=flat_hotcell_list)
+    np.savez(outfile, hot_list=flat_hotcell_list)
     print('done.')
 
 
 def plot(mean, variance, cut_mean, cut_variance):
     print('\nplotting figures:')
-    plt.figure(1)
+    plt.figure(figsize=(12,6))
+    plt.subplot(121)
     plt.hist2d(mean, variance, bins=500, norm=LogNorm())
     plt.title('Variance vs. Mean: Before cut')
     plt.xlabel('Mean')
     plt.ylabel('Variance')
     plt.colorbar()
 
-    plt.figure(2)
+    plt.subplot(122)
     plt.hist2d(cut_mean, cut_variance, bins=500, norm=LogNorm())
     plt.title('Variance vs. Mean: After cut')
     plt.xlabel('Mean')
@@ -34,13 +37,7 @@ def plot(mean, variance, cut_mean, cut_variance):
 
 def compute(data):
 
-    '''  
-    Phone resolutions
-    S6: (5238, 3000)
-    V20: (4640, 3480)
-    '''
-    x_res = 4640
-    y_res = 3480
+    x_res, y_res = load_res(args.calib)
     total_res = x_res * y_res
     
     sum_ = data['sum']
@@ -56,11 +53,7 @@ def compute(data):
     temp_mean_sm = np.mean(snd_max)
     
     # sort snd_max and find largest values in second max
-    sorted_snd_max = np.sort(snd_max)[::-1]
-    temp_large_sm  = []
-    for i in sorted_snd_max:
-        if (i > temp_mean_sm):
-           temp_large_sm.append(i)
+    temp_large_sm  = snd_max[snd_max > temp_mean_sm]
     
     # compute thresh, make cuts, obtain hotcells
     large_sm_log     = np.array(temp_large_sm)
@@ -68,7 +61,7 @@ def compute(data):
     large_sm_std     = np.std(temp_large_sm)
     
     # extra buffer for large standard deviations
-    thresh = large_sm_mean if large_sm_std > 50 else large_sm_mean + large_sm_std
+    thresh = large_sm_mean + large_sm_std
     
     keep_pixels      = (snd_max <= thresh) & (variance < 2000) # for displaying
     comp_mean        = mean[keep_pixels]     
@@ -93,7 +86,7 @@ def compute(data):
     print('%% of hotcells found:     %.3f' % (100.0 * (hotcells.size / total_res)))    
 
     if args.commit:
-        export(hotcells)
+        export(hotcells, os.path.join(args.calib, 'hot_online.npz'))
     
     if args.plot:
         plot(mean, variance, comp_mean, comp_variance) 
@@ -105,8 +98,10 @@ if __name__ == '__main__':
     parser = ArgumentParser(description='')
     parser.add_argument('npz', help='.npz file to load')
 
-    parser.add_argument('--commit',action="store_true", help="commit hotcells as hot.npz")
-    parser.add_argument('--plot',action="store_true", help="plot hotcell elimination results")
+    parser.add_argument('--calib', default='calib', help="calibration directory")
+    
+    parser.add_argument('--commit', action='store_true', help='commit to hot_online.npz')
+    parser.add_argument('--plot', action="store_true", help="plot hotcell elimination results")
     parser.add_argument('--lens', action="store_true", help="compute hotcells that have lens shading")
 
     args = parser.parse_args()

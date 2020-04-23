@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import argparse
 import sys
+import os
 from unpack import *
 from matplotlib.colors import LogNorm
 
@@ -180,8 +181,13 @@ def fit_gain(args, sum_stack, ssq_stack, mean_stack, var_stack, count):
         print('full_vars.shape:      ', full_vars.shape)
         print('full_vars.size:       ', full_vars.size)
         
-        np.savez("calib/gain.npz", gain=full_gain, intercept=full_intercept)
-        np.savez("calib/gain_points.npz", count=full_count, means=full_means, vars=full_vars)
+        np.savez(os.path.join(args.calib, "gain.npz"), 
+                gain=full_gain, 
+                intercept=full_intercept)
+        np.savez(os.path.join(args.calib, "gain_points.npz"), 
+                count=full_count, 
+                means=full_means, 
+                vars=full_vars)
 
     return gain, intercept
 
@@ -274,15 +280,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Fit gain of each pixel from a series of runs at different exposures and light levels', epilog=example_text,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('files', metavar='FILE', nargs='+', help='file to process')
-    parser.add_argument('--commit',action="store_true", help="save calibration results to calibration directory")
+    parser.add_argument('--calib', default='calib', help="calibration directory to save files")
     parser.add_argument('--pixel_range',type=int,nargs=2, metavar=("MIN","MAX"),help="Only evalulate pixels with MIN <= index < MAX", default=[0,0])
     parser.add_argument('--max_var',type=float,metavar="X",help="maximum variance in plots",default=800)
     parser.add_argument('--max_mean',type=float,metavar="Y",help="maximum mean in plots",default=200)
     
+    parser.add_argument('--commit', action='store_true', help='commit to .npz files in calibration directory')
     parser.add_argument('--plot', action="store_true", help="make gain plots")
     parser.add_argument('--rsquared', action="store_true", help="plot R^2 value")
     parser.add_argument('--sandbox', action="store_true", help="experimental code")
-    
+
     args = parser.parse_args()
     
     count = 0

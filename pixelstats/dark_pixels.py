@@ -1,6 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import sys
+import os
 from unpack import *
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
@@ -17,13 +18,13 @@ def process(filename, args):
     alldark = True
 
     # load the image geometry from the calibrations:
-    width, height = load_res()
+    width, height = load_res(args.calib)
 
-    print "processing file:  ", filename
+    print("processing file: ", filename)
     try:
         npz = np.load(filename)
     except:
-        print "could not process file ", filename, " as .npz file.  Use --raw option?"
+        print("could not process file", filename, "as .npz file.  Use --raw option?")
         return
 
     exposure = npz['exposure']
@@ -67,7 +68,7 @@ def process(filename, args):
         plt.show()
 
     xpos = index % width
-    ypos = index / width
+    ypos = index // width
 
     darkx = xpos[dark]
     darky = ypos[dark]
@@ -110,7 +111,7 @@ def process(filename, args):
     flat = cy*best_i + cx
     flat = np.unique(flat)
     ux = flat % best_i
-    uy = flat / best_i
+    uy = flat // best_i
     
     plt.plot(ux,uy,".", color="blue")
     plt.xlabel("x position")
@@ -123,7 +124,7 @@ def process(filename, args):
     # now build the entire dark pixel map:
     full  = np.arange(width*height)
     fullx = full % width
-    fully = full / width
+    fully = full // width
     mapf = fullx%best_i + (fully%best_j)*best_i
     all_dark = np.in1d(mapf,flat)
     # future python:
@@ -134,7 +135,8 @@ def process(filename, args):
 
     if (args.commit):
         print "saving dark pixel map to calibration directory."
-        np.save("calib/all_dark.npy", all_dark)
+        filename = os.path.join(args.calib, 'all_dark.npy')
+        np.save(filename, all_dark)
 
     plt.subplot(2,1,1)
     plt.hist2d(mean[(all_dark==False)],vari[(all_dark==False)],norm=LogNorm(),bins=[100,100],range=[[0,max_mean],[0,max_vari]])
@@ -170,6 +172,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Combine multiple pixelstats data files.', epilog=example_text,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('file', metavar='FILE', nargs=1, help='file to process')
+    parser.add_argument('--calib', default='calib', help='directory to store calibration files')
     parser.add_argument('--skip_prelim',action="store_true", help="skip the preliminary plots.")
     parser.add_argument('--slope', metavar='SLOPE', type=float, help='set slope factor to SLOPE (default: %(default).2f)', default=0.6)
     parser.add_argument('--offset', metavar='OFFSET', type=float, help='set offset factor to OFFSET (default: %(default).2f)', default=0.05)

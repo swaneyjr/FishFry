@@ -86,11 +86,22 @@ def process(filename):
 
 
 def post():
-    print("saving combined data as", OUTFILE)
-    PATH = os.path.join(BASE_PATH, OUTFILE)
-    np.savez(PATH, name=OUTFILE, pixels=PIXELS, sum=SUM, ssq=SSQ, max=MAX, second=SECOND, \
-              num=NUM, exposure=EXPOSURE, sens=SENS, width=WIDTH, height=HEIGHT, \
-               section=SECTION, samplestep=SAMPLESTEP, firstpixel=FIRSTPIXEL, lastpixel=LASTPIXEL)
+    print("saving combined data as", PATH) 
+    np.savez(PATH, 
+            pixels=PIXELS, 
+            sum=SUM, 
+            ssq=SSQ, 
+            max=MAX, 
+            second=SECOND,
+            num=NUM, 
+            exposure=EXPOSURE, 
+            sens=SENS, 
+            width=WIDTH, 
+            height=HEIGHT, 
+            section=SECTION, 
+            samplestep=SAMPLESTEP, 
+            firstpixel=FIRSTPIXEL, 
+            lastpixel=LASTPIXEL)
 
 if __name__ == "__main__":
     example_text = '''example:
@@ -105,17 +116,19 @@ if __name__ == "__main__":
     parser.add_argument('--range', nargs=2, metavar=("FIRST","LAST"), type=int,help="only use runs where FIRST <= run number <= LAST")
     args = parser.parse_args()
     
-    if (args.range != None):
+    if args.range:
         CHECK_MIN = args.range[0]
         CHECK_MAX = args.range[1]
         print("using only runs with run number from ", CHECK_MIN, " to ", CHECK_MAX, " (inclusive).")
 
-    if ((args.exposure != None) and (args.exposure > 0)):
+    if (args.exposure != None) and (args.exposure > 0):
         CHECK_EXPOSURE = args.exposure
         print("using only runs with exposure ", CHECK_EXPOSURE)
 
     if (args.out != None):
-        OUTFILE = args.out    
+        PATH = args.out
+    else:
+        PATH = os.path.join(BASE_PATH, OUTFILE)
 
     for filename in args.files:
         process(filename)

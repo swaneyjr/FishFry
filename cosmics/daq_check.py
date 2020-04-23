@@ -48,14 +48,15 @@ def process_hist(filename, args):
 def process_trig(filename,args,ref_bins, ref_hist, ref_err):
     header,px,py,highest,region,timestamp,millistamp,images,dropped = trigger.unpack_all(filename)
     trigger.show_header(header)
-    num_zerobias = trigger.interpret_header(header, "num_zerobias")
-    width  = trigger.interpret_header(header, "width")
-    height = trigger.interpret_header(header, "height")
 
-    if (args.calib):
+    num_zerobias = trigger.interpret_header(header, "num_zerobias")
+
+    if args.calib:
+        width = trigger.interpret_header(header,"width")
+        height = trigger.interpret_header(header, "height")
         dx = trigger.interpret_header(header,"region_dx")
         dy = trigger.interpret_header(header,"region_dy")
-        region = calibrate_region(px,py,region,dx,dy,width,height)
+        region = calibrate_region(px,py,region,dx,dy,width,height,calib)
    
 
 
@@ -136,7 +137,7 @@ if __name__ == "__main__":
     parser.add_argument('hist', metavar='HIST', help='histogram file to process')
     parser.add_argument('trig', metavar='TRIG', nargs='+', help='trigger file(s) to process')
     parser.add_argument('--sandbox',action="store_true", help="run sandbox code and exit (for development).")
-    parser.add_argument('--calib',action="store_true", help="compare calibrated pixel values.")
+    parser.add_argument('--calib',default='calib', help="path to calibration files")
     parser.add_argument('--max',  type=int, default=50,help="maximum pixel value in rate plot (x-axis).")
     args = parser.parse_args()
 

@@ -3,21 +3,21 @@
 # dump the header from run data
 
 import sys
+import os
 from unpack import *
 
 import argparse
-
 
 def process(filename,args):
     header = unpack_header(filename)
     show_header(header)
 
-    if (args.res):
+    if args.res:
         width = interpret_header(header,"width")
         height = interpret_header(header,"height")
-        print "recording width:   ", width
-        print "recording height:  ", height
-        np.savez("calib/res.npz", width=width, height=height)
+        print("recording width:   ", width)
+        print("recording height:  ", height)
+        np.savez(os.path.join(args.calib, 'res.npz'), width=width, height=height)
     
 if __name__ == "__main__":
 
@@ -29,13 +29,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Combine multiple pixelstats data files.', epilog=example_text,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('files', metavar='FILE', nargs='+', help='file to process')
-    parser.add_argument('--res',action="store_true", help="save resolution data to calibration file")
+    parser.add_argument('--calib', default='calib', help="calibration directory to save resolution")
+    parser.add_argument('--res', action='store_true', help='output resolution file')
     args = parser.parse_args()
-
-    if (args.res):
-        if (len(args.files) != 1):
-            print "specify only one file for defining the image geometry\n"
-            exit(0)
 
     for filename in args.files:
         print "processing file:  ", filename

@@ -7,6 +7,6 @@
 *.npy
 *.npz
 *.cal
-data
+runs
 calib
 log*.txt

@@ -1,120 +1,186 @@
 #!/usr/bin/env python3
 
-import sys
+import os
 from unpack import *
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 
+from hashlib import sha512
+
 import argparse
 
-from geometry import load_res, down_sample
+HOT_NPZ = 'hot_online.npz'
+HOT_CAL = 'hot_pixels.cal'
 
-def analysis(args):
+WGT_NPZ = 'lens.npz'
+WGT_CAL = 'pixel_weight.cal'
 
-    width, height = load_res()
+DENOM = 1023
 
-    # load the lens shading map:
-    try:
-        filename = "calib/lens.npz"
-        gains  = np.load(filename);
-    except:
-        print("could not process file ", filename, " as .npz file.  Run gain.py with --commit option first?")
-        return
-    ds          = gains['down_sample']
-    lens        = gains['lens']
-    
+def export_hot(infile, outfile): 
+ 
     # load the hot cell list:
     try:
-        filename = "calib/hot.npz"
-        hots  = np.load(filename);
+        hots  = np.load(infile)
     except:
-        print("could not process file ", filename, " as .npz file.  Run gain.py with --commit option first?")
+        print("could not process file ", infile, " as .npz file.  Run gain.py with --commit option first?")
         return
-    hot       = hots['hot_list']
-    attributes('hot', hot)
-    attributes('lens_shading', lens)
-
-    print("number of hot cells:        ", hot.size)
-    print("maximum index:              ", np.max(hot))
-    print("shape of lens shading map:  ", lens.shape)
-    print("down sample:                ", ds)
-    print("width:                      ", width)
-    print("height:                     ", height)
-    print("max pixel:                  ", width*height)
-    ly = lens.shape[0]
-    lx = lens.shape[1]
-    print("lx:                         ", lx)
-    print("ly:                         ", ly)
-    print("lx*ds:                      ", lx*ds)
-    print("ly*ds:                      ", ly*ds)
-
-    wgt = lens.reshape(lens.size)
-    pos = (wgt > 0)
-    wgt[pos] = 1.0/wgt[pos]
-    wgt[pos==False] = 0
-
-    print("zero weight regions:        ", np.sum(pos==False))
-    print("weight 0:                   ", wgt[0])
-    print("weight 1:                   ", wgt[1])
-
-    hot_hash = hash(hot.tostring())&0x7fffffff
-    wgt_hash = hash(wgt.tostring())&0x7fffffff
-
-    print("hash hot pixels:  ", hot_hash)
-    print("hash wgt:         ", wgt_hash)
-
-    #
-    # Output for emulation:
-    #
-    down, nx, ny = down_sample(width, height, ds, ds)    
     
-    # list by list multiplication
-    denom = 1024
-    
-    # down is a form of counting
-    print('wgt: ', wgt)
-    print('wgt.astype("f4")', wgt.astype("f4"))
-    print('wgt.astype("f4")*denom)', wgt.astype("f4")*denom)
-    print('wgt.astype("f4")*denom).astype("i4")', (wgt.astype("f4")*denom).astype("i4"))
-    print('wgt.size', wgt.size)
-    print('down.size', down.size)
+    hot = hots['hot_list'].astype('>i4')
+    hot_hash = int(sha512(hot.tostring()).hexdigest(), 16) & 0x7fffffff
+
+    print("**** Hotcells ****")
+    print("number of hot cells:         ", hot.size)
+    print("maximum index:               ", np.max(hot))
+    print("hash hot pixels:             ", hot_hash)
     print()
+    
+    #
+    # Output to Java
+    #
+    
+    h_dat = np.hstack([
+        hot_hash, 
+        hot.size, 
+        hot]).astype('>i4')
 
-    # * Currently only works with unity gain *
-    #hw_wgt = (wgt.astype("f4")*denom).astype("i4")[down]
-    #hw_wgt = np.full(height*width, denom)
-    hw_wgt = np.ones(height*width)
-    hw_wgt[hot] = 0
-    hw_wgt = hw_wgt.reshape((height,width))
-    np.savez("calib/weight.npz",hot_hash=hot_hash, wgt_hash=wgt_hash, denom=denom,wgt=hw_wgt);    
-    print('saved weight.npz') 
+    with open(outfile, 'w+') as f:
+        h_dat.tofile(f)
+
+
+def export_wgt(infile, outfile):
+
+    # load gains
+    try:
+        gains  = np.load(infile);
+    except:
+        print("could not process file ", infile, " as .npz file.  Run gain.py with --commit option first?")
+        return
+
+    ds          = gains['down_sample']
+    lens        = gains['lens']
+
+    ly, lx = lens.shape
+
+    wgt = np.where(lens > 0, 1/lens, 0)
+    
+    # normalize weights to [0,1]
+    wgt /= wgt.max()
+    wgt = wgt.astype('>f4')
+
+    width  = lx*ds
+    height = ly*ds
+    wgt_hash = int(sha512(wgt.tostring()).hexdigest(), 16) & 0x7fffffff
+
+    print("**** Weights ****")
+    print("lens-shading map dims:   ", lens.shape)
+    print("down sample:             ", ds)
+    print("lx:                      ", lx)
+    print("ly:                      ", ly)
+    print("width:                   ", width)
+    print("height:                  ", height)
+    print("total pixels:            ", width*height) 
+
+    print("max weight:              ", wgt.max())
+    print("min weight:              ", wgt.min()) 
+    print("mean weight:             ", wgt.mean())
+
+    print("hash wgt:                ", wgt_hash) 
+    print()
     
     #
     # Output to Java
     # 
 
-    h = np.array([],dtype=">i4")
-    h = np.append(h,wgt_hash)
-    h = np.append(h,width)
-    h = np.append(h,height)
-    h = np.append(h,ds)
-    h = np.append(h,lx)
-    h = np.append(h,ly)
+    w_header = np.hstack([
+        wgt_hash,
+        ds,
+        lx,
+        ly]).astype(">i4")
 
-    with open('calib/pixel_weight.cal', 'w+') as f:
-        h.astype(">i4").tofile(f)
+    with open(outfile, 'w+') as f:
+        w_header.astype(">i4").tofile(f)
         wgt.astype(">f4").tofile(f)
-    
+     
 
-    h = np.array([])
-    h = np.append(h,hot_hash)
-    h = np.append(h,hot.size)
-    h = np.append(h,hot)
+def import_hot(infile, outfile):
 
-    with open('calib/hot_pixels.cal', 'w+') as f:
-        h.astype(">i4").tofile(f)
-    return
+    with open(infile) as f:
+        hot_hash = np.fromfile(f, dtype='>i4',count=1)[0]
+        n_hot = np.fromfile(f, dtype='>i4', count=1)[0]
+        hot = np.fromfile(f,dtype='>i4')
+
+    if hot.size != n_hot: 
+        print('Invalid data in', infile)
+        print('File length', hot.size, 'does not match metadata', n_hot)
+        return
+
+    if int(sha512(hot.tostring()).hexdigest(), 16) & 0x7fffffff != hot_hash:
+        print('Invalid data in', infile)
+        print('Computed hash value does not match metadata')
+        return
+
+    print("**** Hotcells ****")
+    print("number of hot cells:         ", hot.size)
+    print("maximum index:               ", np.max(hot))
+    print("hash hot pixels:             ", hot_hash)
+    print()
     
+    #
+    # Output to npz
+    #
+    
+    np.savez(outfile, hot_list=hot)
+
+
+def import_wgt(infile, outfile):
+    
+    # load .cal file
+    with open(infile) as f:
+        wgt_hash = np.fromfile(f, dtype='>i4', count=1)[0]
+        ds = np.fromfile(f, dtype='>i4', count=1)[0]
+        lx = np.fromfile(f, dtype='>i4', count=1)[0]
+        ly = np.fromfile(f, dtype='>i4', count=1)[0]
+        wgt = np.fromfile(f, dtype='>f4')
+
+
+    if wgt.size != lx*ly: 
+        print('Invalid data in', infile)
+        print('File length', wgt.size, 'does not match metadata', lx*ly)
+        return
+        
+    if int(sha512(wgt.tostring()).hexdigest(), 16) & 0x7fffffff != wgt_hash:
+        print('Invalid data in', infile)
+        print('Computed hash value does not match metadata')
+        return
+
+    lens = np.where(wgt > 0, 1/wgt, 0).reshape(ly, lx)
+
+    width  = lx*ds
+    height = ly*ds
+ 
+    print("**** Weights ****")
+    print("lens-shading map dims:   ", (ly, lx))
+    print("down sample:             ", ds)
+    print("lx:                      ", lx)
+    print("ly:                      ", ly)
+    print("width:                   ", width)
+    print("height:                  ", height)
+    print("total pixels:            ", width*height) 
+
+    print("max weight:              ", wgt.max())
+    print("min weight:              ", wgt.min()) 
+    print("mean weight:             ", wgt.mean())
+
+    print("hash wgt:                ", wgt_hash) 
+    print()
+    
+    #
+    # Output to npz
+    # 
+
+    np.savez(outfile, down_sample=ds, lens=lens)
+
     
 if __name__ == "__main__":
     example_text = '''examples:
@@ -124,11 +190,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Export calibrations to Android', epilog=example_text,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--sandbox',action="store_true", help="run sandbox code and exit (for development).")
-    parser.add_argument('-unity', action='store_true', help='unity gain - no lens shading')
-    args = parser.parse_args()
+    parser.add_argument('--calib', default='calib', help='path to calibration files')
+    parser.add_argument('--reverse', action='store_true', help='convert .cal files to .npz')
+    args = parser.parse_args() 
 
-    analysis(args)
+    hot_npz = os.path.join(args.calib, HOT_NPZ)
+    hot_cal = os.path.join(args.calib, HOT_CAL)
+    wgt_npz = os.path.join(args.calib, WGT_NPZ)
+    wgt_cal = os.path.join(args.calib, WGT_CAL)
 
-
+    if args.reverse:
+        import_hot(hot_cal, hot_npz)
+        import_wgt(wgt_cal, wgt_npz)
+    else:
+        export_hot(hot_npz, hot_cal)
+        export_wgt(wgt_npz, wgt_cal)
 
 

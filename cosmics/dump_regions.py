@@ -35,14 +35,14 @@ def process(filename,args):
         print("deadtime frac:       ", dead)
         return
 
-    if (args.calib):
+    if not args.raw:
         if not width or not height:
             width = interpret_header(header,"width")
             height = interpret_header(header,"height")
 
         dx = interpret_header(header,"region_dx")
         dy = interpret_header(header,"region_dy")
-        region = calibrate_region(px,py,region,dx,dy,width,height)
+        region = calibrate_region(px,py,region,dx,dy,width,height,args.calib)
 
     num_region = region.shape[0]
     count = 0
@@ -79,7 +79,8 @@ if __name__ == "__main__":
     parser.add_argument('--triggered',action="store_true", help="dump only triggered regions")
     parser.add_argument('--zerobias',action="store_true", help="dump only zero-bias regions")
     parser.add_argument('--short',action="store_true", help="run over small amount of data")
-    parser.add_argument('--calib',action="store_true", help="apply calibrated weights to region data")
+    parser.add_argument('--calib',default='calib', help='location of calibration directory')
+    parser.add_argument('--raw',action="store_true", help="do not apply weights to data")
     parser.add_argument('--framerate',action="store_true", help="calculate framerate and exit")
 
     args = parser.parse_args()
