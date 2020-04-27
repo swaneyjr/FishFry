@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import sys
 import os
@@ -53,7 +53,7 @@ def process(filename, args):
     ypos = index / width
 
 
-    keep = np.full(num.size, True, dtype=bool)
+    keep = np.full(width*height, True, dtype=bool)
 
     if (args.no_dark or args.all_dark):
         try:
@@ -133,15 +133,17 @@ def process(filename, args):
 
 
     if (not args.skip_default):
-        plot_name = "plots/mean_var.pdf"
-        if (args.gain):
-            plot_name = "plots/mean_var_calib.pdf"
-
+        
         plt.hist2d(cmean,cvari,norm=LogNorm(),bins=[500,500],range=[[0,args.max_mean],[0,args.max_var]])
         plt.xlabel("mean")
         plt.ylabel("variance")
-        print("saving plot to file:  ", plot_name)
-        plt.savefig(plot_name)
+        
+        if args.save_plot:
+            plot_name = "plots/mean_var_calib.pdf" if args.calib \
+                    else "plots/mean_var.pdf"
+            print("saving plot to file:  ", plot_name)
+            plt.savefig(plot_name)
+        
         plt.show()
 
 
@@ -251,7 +253,7 @@ if __name__ == "__main__":
     parser.add_argument('--gain',action="store_true", help="apply gain correction.")
     parser.add_argument('--hot', nargs=2, metavar=("MEAN","VAR"), type=float,help="save list of pixels where mean > MEAN or var > VAR")
     parser.add_argument('--calib', default='calib', help='directory with calibration files')
-    
+    parser.add_argument('--save_plot', action='store_true', help='Save plots in ./plots/ directory')
     args = parser.parse_args()
 
     for filename in args.files:

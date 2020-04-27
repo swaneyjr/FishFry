@@ -13,10 +13,10 @@ from unpack import *
 from matplotlib.colors import LogNorm
 
 # for stacking
-sums       = []
-ssqs       = []
-means      = []
-variances  = []
+SUMS       = []
+SSQS       = []
+MEANS      = []
+VARIANCES  = []
 
 # pixel information
 total_pixels   = 0
@@ -26,87 +26,67 @@ last_pixel     = 0
 WIDTH   = 0
 HEIGHT  = 0 
 
-def process(filename, args, count):
+def process(filename, args):
     global pixels, first_pixel, last_pixel, \
-           sums, ssqs, means, variances, \
+           SUMS, SSQS, MEANS, VARIANCES, \
            WIDTH, HEIGHT
     
-    if (count == 0):
-        total_pixels  = filename['pixels']
-        first_pixel   = filename['firstpixel']
-        last_pixel    = filename['lastpixel']
-        WIDTH         = filename['width']
-        HEIGHT        = filename['height']
+    f = np.load(filename)
+
+    if not WIDTH:
+        total_pixels  = f['pixels']
+        first_pixel   = f['firstpixel']
+        last_pixel    = f['lastpixel']
+        WIDTH         = f['width']
+        HEIGHT        = f['height']
 
         print('total pixels: ', total_pixels)
     
-    print('processing file: ', filename['name'])
-    
-    # import
-    sum = filename['sum']
-    ssq = filename['ssq']
-    num = filename['num']
+    print('processing file: ', filename)
 
     # compute means and variances, append to global lists
-    mean      = sum / num
-    variance  = (( ssq / num ) - ( (sum / num) **2 )) * ( num / (num - 1) )
+    mean      = f['sum'] / f['num']
+    variance  = (f['ssq'] / f['num'] - mean**2) * f['num'] / (f['num'] - 1)
     
-    sums.append(sum)
-    ssqs.append(ssq)
-    means.append(mean)
-    variances.append(variance)
+    SUMS.append(f['sum'])
+    SSQS.append(f['ssq'])
+    MEANS.append(mean)
+    VARIANCES.append(variance)
 
-
-# vertically stack arrays to condense information
-def stack():
-    sum_stack        = np.array([])
-    ssq_stack        = np.array([])
-    mean_stack       = np.array([])
-    var_stack        = np.array([])
-
-    sum_stack        = np.vstack(sums)
-    ssq_stack        = np.vstack(ssqs)
-    mean_stack       = np.vstack(means)
-    var_stack        = np.vstack(variances) 
-    
-    print('      shapes of stacked numpy arrays:')
-    print('sum:         ', sum_stack.shape)
-    print('ssq:         ', ssq_stack.shape)
-    print('mean:        ', mean_stack.shape)
-    print('variance:    ', var_stack.shape)
-    print('stacking completed')
-    
-    return sum_stack, ssq_stack, mean_stack, var_stack
-
-
+    f.close()
+ 
 # Best-fit line, assuming constant fractional uncertainty in the y value.
 # --> uses a weighted regression TBDetermined
-def fit_line(x, y):
+def fit_line(x, y, xmax=np.inf, ymax=np.inf):
     print('\nfitting line, divide by zero will occur')
     print('size of x: ', x.size)
     print('size of y: ', y.size)
    
     # weighted regression for calculating gain and intercept
-    ex     = np.sum( np.divide(x, np.square(y), out=np.zeros_like(x), where=(x < 850)), axis=0)
-    ey     = np.sum( np.divide(np.ones(y.shape), y, out=np.zeros_like(np.ones(y.shape)), where=(x < 850)), axis=0)
-    exx    = np.sum( np.divide( np.square(x), np.square(y), out=np.zeros_like(x), where=(x < 850)), axis=0)
-    exy    = np.sum( np.divide( x, y, out=np.zeros_like(x), where=(x < 850)), axis=0)
-    ew     = np.sum( np.divide( np.ones(y.shape), np.square(y), out=np.zeros_like(np.ones(y.shape)), where=(x < 850)), axis=0)
-    eyy = 1
+    where = (x < xmax) & (y < ymax)
+    count = np.sum(where, axis=0)
+    
+    xvalid = np.where(where, x, 0)
+    yvalid = np.where(where, y, 0)
+    w = 1 #np.where(y>0, 1/y**2, 0)
+    
+    xw = xvalid*w
+    yw = yvalid*w
+
+    ex     = np.sum(xw, axis=0) / count
+    ey     = np.sum(yw, axis=0) / count
+    exx    = np.sum(xw**2, axis=0) / count
+    exy    = np.sum(xw*yw, axis=0) / count
+    eyy    = np.sum(yw**2, axis=0) / count
+    ew     = np.sum(w, axis=0) / count
     denom  = exx*ew - ex*ex
+
+    a = (exy*ew - ex*ey) / denom
+    b = (exx*ey - exy*ex) / denom
     
-    a = np.divide(( exy*ew - ex*ey),  denom)
-    b = np.divide(( exx*ey - exy*ex), denom)
-    
-    # using Pearson coefficient method to calculate R^2 values
-    e_x  = np.mean(x, axis=0) 
-    e_y  = np.mean(y, axis=0) 
-    e_xx = np.mean(np.square(x), axis=0)
-    e_yy = np.mean(np.square(y), axis=0)
-    e_xy = np.mean((x*y), axis=0)
-    
-    r2_numer = (e_xy - e_x*e_y)**2
-    r2_denom = (e_xx - e_x**2) * (e_yy - e_y**2) 
+    # calculate R^2 values    
+    r2_numer = (exy - ex*ey)**2
+    r2_denom = (exx - ex**2) * (eyy - ey**2)
     r2 = np.divide(r2_numer, r2_denom)
 
     print('line fitted. \nall intermediate values computed:')
@@ -124,80 +104,84 @@ def fit_line(x, y):
     print('max: ', r2[np.logical_not(np.isnan(r2))].max())
     print()
     
-    return a, b, r2
+    return a, b, r2, count
 
 
+def plot_array(statistic, title, cmap='viridis', log=False):
+    global WIDTH, HEIGHT
 
-def fit_gain(args, sum_stack, ssq_stack, mean_stack, var_stack, count):    
+    sort_stat = np.sort(statistic)
+    idx = statistic.size // 100
+
+    vmin = sort_stat[idx]
+    vmax = sort_stat[-idx]
+
+    norm = LogNorm() if log else None
+
+    plt.imshow(statistic.reshape(HEIGHT, WIDTH), 
+            cmap=cmap, vmin=vmin, vmax=vmax, norm=norm)
+    plt.title(title)
+    plt.xlabel('x')
+    plt.ylabel('y')
+    plt.colorbar()
+
+
+def plot_points(nx,ny,mean, variance, gain, intercept, rsq):
+    for ix, iy in np.ndindex((nx, ny)):
+        plt.subplot(nx, ny, iy*nx + ix+1)
+
+        idx = np.random.randint(gain.size)
+
+        plt_x = mean[:,idx]
+        plt_y = variance[:,idx]
     
-    gain, intercept, r_squared = fit_line(mean_stack, var_stack) 
-    print('\nobtained gain and intercept')
+        a = gain[idx]
+        b = intercept[idx]
+        x = np.linspace(0,1023, 100)
+        y = a * x + b
+        r2 = rsq[idx]
+
+        plt.plot(plt_x, plt_y, 'o', linestyle='', )
+        plt.plot(x, y, c='gold')
+        plt.xlabel(r'$\mu$')
+        plt.ylabel(r'$\sigma^2$')
+        plt.title(r'$R^2={}$'.format(r2))  
+
+    plt.tight_layout()
+
+
+def plot_hist(x, y, xlabel=None, ylabel=None, title=None):
+
+    xs = np.sort(x)
+    ys = np.sort(y)
+    idx = xs.size // 5000
     
-    if args.sandbox:
-        print('========================================')
-        print('-- in sandbox development environment -- ')
-        print('========================================')
-        print()
+    xmin = xs[idx]
+    ymin = ys[idx]
+    xmax = xs[-idx]
+    ymax = ys[-idx]
 
-        attributes('gain', gain)
-        attributes('intercept', intercept)
-        attributes('R squared', r_squared)
-        
-        fig, ax1 = plt.subplots()
-        img1 = ax1.imshow(r_squared.reshape(HEIGHT, WIDTH))
-        plt.colorbar(img1, ax=ax1)
-        
-        fig, ax2 = plt.subplots()
-        img2 = ax2.imshow(gain.reshape(HEIGHT, WIDTH))
-        plt.colorbar(img2, ax=ax2)
-        plt.show()
+    plt.hist2d(xs, ys, bins=(200,200), 
+            range=((xmin,xmax), (ymin, ymax)), 
+            norm=LogNorm())
+    
+    if xlabel:
+        plt.xlabel(xlabel)
+    if ylabel:
+        plt.ylabel(ylabel)
+    if title:
+        plt.title(title)
 
-        print('plotting')
+    plt.colorbar()
 
 
-    # computing R^2 value
-    if args.rsquared:
-        print('\ncomputing R^2 value')
-        ### more to come
 
-    # commit computed information to .npz files
-    if (args.commit):
-        print('saving fit line results')
-        full_gain       = np.array(gain)
-        full_intercept  = np.array(intercept)
-        full_means      = np.array(mean_stack)
-        full_vars       = np.array(var_stack)
-        full_count      = np.full(full_gain.size, count, dtype=int)
-        
-        print('done. \ndumping information to be committed:')
-        print('full_gain.shape:      ', full_gain.shape)
-        print('full_gain.size:       ', full_gain.size)
-        print('full_intercept.shape: ', full_gain.shape)
-        print('full_intercept.size:  ', full_gain.size)
-        print('full_count.shape:     ', full_count.shape)
-        print('full_count.size:      ', full_count.size)
-        print('full_means.shape:     ', full_means.shape)
-        print('full_means.size:      ', full_means.size)
-        print('full_vars.shape:      ', full_vars.shape)
-        print('full_vars.size:       ', full_vars.size)
-        
-        np.savez(os.path.join(args.calib, "gain.npz"), 
-                gain=full_gain, 
-                intercept=full_intercept)
-        np.savez(os.path.join(args.calib, "gain_points.npz"), 
-                count=full_count, 
-                means=full_means, 
-                vars=full_vars)
-
-    return gain, intercept
-
-
-### in progress
-def make_plots(args, gain, intercept, mean_stack, var_stack):
+### old
+def make_plots(args, gain, intercept, means, variances):
     print('making plots (in progress)')
     # find array of temporary max values, then find true maximums
-    temp_xmax = np.max(mean_stack, axis=1)
-    temp_ymax = np.max(var_stack,  axis=1)
+    temp_xmax = np.max(means, axis=1)
+    temp_ymax = np.max(variances,  axis=1)
     
     xmax = np.max(temp_xmax)
     ymax = np.max(temp_ymax)
@@ -211,7 +195,7 @@ def make_plots(args, gain, intercept, mean_stack, var_stack):
     f, axes = plt.subplots(3, 3, sharex='col', sharey='row')
     axes = axes.flatten()
 
-    nonzero = mean_stack != 0
+    nonzero = means != 0
     attributes('nonzero', nonzero)
     plotted = 0
    
@@ -264,13 +248,7 @@ def make_plots(args, gain, intercept, mean_stack, var_stack):
     axes[7].set_xlabel("mean")
     plt.savefig("plots/gain.pdf")
     plt.show()
-    return
 
-def analysis(args, sum_stack, ssq_stack, mean_stack, var_stack, count):
-    gain, intercept = fit_gain( args, sum_stack, ssq_stack, mean_stack, var_stack, count )
-    print('fitted gain complete.')
-    if args.plot:
-        make_plots(args, gain, intercept, mean_stack, var_stack)
         
 if __name__ == "__main__":
     example_text = '''examples:
@@ -282,25 +260,105 @@ if __name__ == "__main__":
     parser.add_argument('files', metavar='FILE', nargs='+', help='file to process')
     parser.add_argument('--calib', default='calib', help="calibration directory to save files")
     parser.add_argument('--pixel_range',type=int,nargs=2, metavar=("MIN","MAX"),help="Only evalulate pixels with MIN <= index < MAX", default=[0,0])
-    parser.add_argument('--max_var',type=float,metavar="X",help="maximum variance in plots",default=800)
-    parser.add_argument('--max_mean',type=float,metavar="Y",help="maximum mean in plots",default=200)
+    parser.add_argument('--mean_max',type=float,metavar="X",help="maximum mean to include in fitting",default=850)
     
     parser.add_argument('--commit', action='store_true', help='commit to .npz files in calibration directory')
-    parser.add_argument('--plot', action="store_true", help="make gain plots")
-    parser.add_argument('--rsquared', action="store_true", help="plot R^2 value")
+    parser.add_argument('-s', '--spatial_plots', action="store_true", help="make spatial plots for gain, black level, R^2, and number of sample points")
+    parser.add_argument('-p', '--pix_plots', action='store_true', help='plot linear fits for 16 individual pixels')
+    parser.add_argument('-S', '--scatterplot', action='store_true', help='plot gain vs. black level for pixels')
+    parser.add_argument('--plot_all', action='store_true', help='')
     parser.add_argument('--sandbox', action="store_true", help="experimental code")
 
     args = parser.parse_args()
+
+    for filename in args.files:
+        process(filename, args)
     
-    count = 0
-    print('arguments accepted \nbeginning to process: ', args.files)
-    for f in args.files:
-        filename = np.load(f)
-        process(filename, args, count)
-        count += 1
-    
-    # after completed processing, stack and plot
-    print('processing complete. \ntotal files processed: ', count)
-    print('initializing stacking...')
-    sum_stack, ssq_stack, mean_stack, var_stack = stack()
-    analysis(args, sum_stack, ssq_stack, mean_stack, var_stack, count)
+    # after completed processing, save and plot
+    print('processing complete. \ntotal files processed: ', len(args.files)) 
+
+    mean = np.vstack(MEANS)
+    variance = np.vstack(VARIANCES)
+
+    gain, intercept, rsq, count = fit_line(mean, variance, xmax=args.mean_max)
+    black_level = -intercept / gain
+    print('fitted gain complete.')
+
+    n_figs = 0
+    if args.spatial_plots or args.plot_all:
+        n_figs += 1
+        plt.figure(n_figs, figsize=(10,6))
+        plot_array(gain, title='Gain', log=True, cmap='plasma')
+        
+        n_figs += 1
+        plt.figure(n_figs, figsize=(10,6))
+        plot_array(black_level, title='Black level', cmap='cool')
+        
+        n_figs += 1
+        plt.figure(n_figs, figsize=(10,6))
+        plot_array(rsq, title=r'$R^2$', cmap='seismic')
+        
+        n_figs += 1
+        plt.figure(n_figs, figsize=(10,6))
+        plot_array(count, title='Data points', cmap='rainbow')
+
+    if args.pix_plots or args.plot_all:
+        n_figs += 1
+        plt.figure(n_figs, figsize=(15,10))
+        plot_points(4,4, mean, variance, gain, intercept, rsq)
+
+    if args.scatterplot or args.plot_all:
+        n_figs += 1
+        plt.figure(n_figs, figsize=(10,6))
+        plot_hist(gain, black_level, 
+                xlabel='Gain', ylabel='Black level')
+
+    if n_figs:
+        plt.show()
+
+    if args.sandbox:
+        print('========================================')
+        print('-- in sandbox development environment -- ')
+        print('========================================')
+        print()
+
+        attributes('gain', gain)
+        attributes('intercept', intercept)
+        attributes('R squared', rsq)
+        
+        fig, ax1 = plt.subplots()
+        img1 = ax1.imshow(rsq.reshape(HEIGHT, WIDTH))
+        plt.colorbar(img1, ax=ax1)
+        
+        fig, ax2 = plt.subplots()
+        img2 = ax2.imshow(gain.reshape(HEIGHT, WIDTH))
+        plt.colorbar(img2, ax=ax2)
+        plt.show()
+
+        print('plotting') 
+
+    # commit computed information to .npz files
+    if args.commit:
+        print('saving fit line results')
+        
+        print('done. \ndumping information to be committed:')
+        print('gain.shape:      ', gain.shape)
+        print('gain.size:       ', gain.size)
+        print('intercept.shape: ', intercept.shape)
+        print('intercept.size:  ', intercept.size)
+        print('count.shape:     ', count.shape)
+        print('count.size:      ', count.size)
+        print('means.shape:     ', mean.shape)
+        print('means.size:      ', mean.size)
+        print('vars.shape:      ', variance.shape)
+        print('vars.size:       ', variance.size)
+        
+        np.savez(os.path.join(args.calib, "gain.npz"), 
+                gain=gain, 
+                intercept=intercept,
+                rsq=rsq,
+                count=count, 
+                means=mean, 
+                variances=variance)
+
+
