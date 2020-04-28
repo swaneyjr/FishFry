@@ -4,114 +4,95 @@
 from unpack import *
 from matplotlib.colors import LogNorm
 from geometry import load_res, down_sample
+from dark_pixels import load_dark
 import matplotlib.pyplot as plt
 import argparse
 import sys
 import os
 
-def calculate(args):
+def calculate(calib, rsq_thresh=0, calib_dark=True, calib_hot=True, ds=4):
 
     print('loading image geometry')
-    width, height = load_res(args.calib)
+    width, height = load_res(calib)
     index  = np.arange(width*height,dtype=int)
     xpos = index % width
     ypos = index / width
 
     # load the pixel gains:
     try:
-        filename = os.path.join(args.calib, "gain.npz")
-        gains  = np.load(filename);
+        print('loading pixel gains')
+        filename = os.path.join(calib, "gain.npz")
+        fgains  = np.load(filename)
     except:
         print("could not process file ", filename, " as .npz file.  Run gain.py with --commit option first?")
         return
-    gain       = gains['gain']
-    intercept  = gains['intercept']
+    gain       = fgains['gain']
+    intercept  = fgains['intercept'] 
+    rsq        = fgains['rsq']
 
-    # boolean array of 15984000
-    keep = np.isfinite(gain) & np.isfinite(intercept)
+    fgains.close()
 
-    if not args.keep_dark:
+    # set bad pixels to NaN
+    infs = np.isinf(gain) | np.isinf(intercept) | np.isnan(intercept)
+    gain[infs] = np.nan
+
+    if rsq_thresh:
+        gain[rsq < rsq_thresh] = np.nan
+
+    if calib_dark:
         try:
-            filename = os.path.join(args.calib, 'all_dark.npy')
-            all_dark = np.load(filename)           
-        except:
+            print('loading dark pixels')
+            dark = load_dark(calib)
+            gain[dark] = np.nan
+        except IOError:
             print("dark pixel file", filename, "does not exist.")
-        keep = keep & (all_dark == False)
-
-    if not args.no_hot:
+     
+    if calib_hot:
         try:
-            filename = os.path.join(args.calib, "hot_online.npz")
-            hots  = np.load(filename);
-        except:
-            print("could not process file ", filename, " as .npz file.")
-        hot = hots['hot_list']
-        all_hot = np.full(width*height, False)
-        all_hot[hot] = True;
-        keep = keep & (all_hot == False)
+            print('loading hot pixels')
+            filename = os.path.join(calib, "hot_online.npz")
+            hotf  = np.load(filename)
+            hot = hotf['hot_list']
+            hotf.close()
+            gain[hot] = np.nan
+        except IOError:
+            print("could not process file ", filename, " as .npz file.") 
 
     print('beginning to downsample')
-    n = 4               # used for creating an n x n block
-    
-    res_x, res_y = load_res(args.calib)
-    nx = res_x // n
-    ny = res_y // n
+
+    nx = width // ds
+    ny = height // ds
 
     # take mean of each n x n block
-    g_means = gain.reshape(ny, n, nx, n).mean(axis=(1,3))
+    gain_ds = gain.reshape(ny, ds, nx, ds)
+    g_means = np.nanmedian(gain_ds, axis=(1,3))
     
     print('downsampling completed, displaying information:')
     print('nx:                ', nx)
     print('ny:                ', ny)
-    print('nx*ny:             ', nx*ny)
-    print('gain:              ', gain)
-    print('gain.size:         ', gain.size)
-    print('gain.shape:        ', gain.shape)
-    print('intercept:         ', intercept)
-    print('intercept.size:    ', intercept.size)
-    print('intercept.shape:   ', intercept.shape)
-    print('means.shape:       ', g_means.shape)
-    print('means.size:        ', g_means.size)
+    print('lens.size:         ', g_means.size)
+    print('lens.shape:        ', g_means.shape)
+    print('NaN found:         ', np.sum(np.isnan(g_means)))
     print()
     
     print('computed lens shading attributes')
-      
-    if args.commit:
-        filename = os.path.join(args.calib, 'lens.npz')
-        print('computed lens shading committed to ', filename)
-        np.savez(filename, down_sample=n, lens=g_means)
 
-    if args.expt:
-        print('displaying experimental plots')
-        plt.figure(1)
-        plt.plot(g_means, gain)
-        plt.xlabel('mean')
-        plt.ylabel('variance')
+    return g_means
 
 
-    return lens
-
-def load(args):    
-    flens = np.load(os.path.join(args.calib, 'lens.npz'))
+def load(calib):    
+    flens = np.load(os.path.join(calib, 'lens.npz'))
     lens  = flens["lens"]
     flens.close()
     return lens
 
-def plot(args, lens):
+def plot(lens, min_gain=None, max_gain=None):
     print('plotting computed lens')
-    plt.imshow(lens, vmin=args.min_gain, vmax=args.max_gain)
+    plt.imshow(lens, vmin=min_gain, vmax=max_gain)
     plt.colorbar()
-    plt.savefig("plots/lens.pdf")
+    #plt.savefig("plots/lens.pdf")
     plt.show()
-    
-
-def analysis(args):
-    if (args.plot_only):
-        lens = load(args)
-    else:    
-        lens = calculate(args)
-
-    if args.plot:
-        plot(args, lens)
+     
 
         
 if __name__ == "__main__":
@@ -125,19 +106,35 @@ if __name__ == "__main__":
     parser.add_argument('--calib',default='calib', help='calibration directory to use')
     parser.add_argument('--keep_dark',action="store_true", help="explicitly include dark pixels in analysis.")
     parser.add_argument('--keep_hot',action="store_true", help="explicitly include hot pixels in analysis.")
-    parser.add_argument('--short',action="store_true", help="short (test) analysis of a few pixels.")
-    parser.add_argument('--down_sample',  metavar="DOWN", type=int, default=8,help="down sample by amount DOWN.")
-    parser.add_argument('--max_gain',  type=float, default=10,help="minimum gain for plot.")
-    parser.add_argument('--min_gain',  type=float, default=0,help="maximum gain for plot.")
+    parser.add_argument('--min_rsq',type=float,help='minimum r^2 value to be considered in downsampled gain')
+    parser.add_argument('--down_sample',  metavar="DOWN", type=int, default=4,help="down sample by amount DOWN.")
+    parser.add_argument('--max_gain',  type=float, help="minimum gain for plot.")
+    parser.add_argument('--min_gain',  type=float, help="maximum gain for plot.")
     parser.add_argument('--plot_only',action="store_true", help="load and plot previous results.")
 
     parser.add_argument('--commit', action="store_true", help="commit lens.npz file")
     parser.add_argument('--plot', action="store_true", help="plot lens shading values")
-    parser.add_argument('--rsquared', action="store_true", help="plot R^2 values")
-    parser.add_argument('--expt', action="store_true", help="plot experimental plots")
 
     args = parser.parse_args()
-    analysis(args)
+    
+    if args.plot_only:
+        lens = load(args.calib) 
+        plot(lens, args.min_gain, args.max_gain)
+        
+    else: 
+        lens=calculate(args.calib, 
+                calib_dark=(not args.keep_dark), 
+                calib_hot=(not args.keep_hot),
+                rsq_thresh = args.min_rsq,
+                ds=args.down_sample)
+
+        if args.commit:
+            filename = os.path.join(args.calib, 'lens.npz')
+            print('computed lens shading committed to ', filename)
+            np.savez(filename, down_sample=args.down_sample, lens=lens)
+
+        if args.plot: 
+            plot(lens, args.min_gain, args.max_gain)
 
 
 

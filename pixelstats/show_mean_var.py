@@ -7,15 +7,11 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 
 from geometry import load_res
+from dark_pixels import load_dark
 
 import argparse
 
 def process(filename, args):
-    # plots to show:
-    meanvar = True
-    mvzoom  = True
-    hmean   = True
-    hvari  = True
 
     # load data, from either raw file directly from phone, or as output from combine.py utility:
 
@@ -36,56 +32,28 @@ def process(filename, args):
             print("could not process file ", filename, " as .npz file.  Use --raw option?")
             return
 
-        exposure = npz['exposure']
-        sens     = npz['sens']
         sum      = npz['sum']
         ssq      = npz['ssq']
-        num     = npz['num']
-        index = np.arange(sum.size)
-
+        num     = npz['num'] 
     
-    empty = (num == 0)
-    num[empty]=1
     cmean = sum / num
-    cvari = ssq / num - cmean**2
+    cvari = (ssq / num - cmean**2) * num / (num-1)
 
-    xpos = index % width
-    ypos = index / width
+    # first show spatial distribution
+    plt.figure(1, figsize=(6,8))
+    plt.subplot(211)
+    plt.imshow(cmean.reshape(height, width), norm=LogNorm(), cmap='coolwarm')
+    plt.colorbar()
 
+    plt.subplot(212)
+    plt.imshow(cvari.reshape(height, width), norm=LogNorm(), cmap='coolwarm')
+    plt.colorbar()
 
-    keep = np.full(width*height, True, dtype=bool)
+    # now do 2D histogram(s) for mean and variance 
+    plt.figure(2, figsize=(10,8))
 
-    if (args.no_dark or args.all_dark):
-        try:
-            filename = os.path.join(args.calib, 'all_dark.npy')
-            all_dark = np.load(filename)
-        except:
-            print("dark pixel file", filename, "does not exist.")
-            return
-
-        new_dark = [all_dark[i] for i in index]
-        print(new_dark[:10])
-        print(len(new_dark))
-        print(num.size)
-
-        all_dark = np.array(new_dark)
-        
-        if args.no_dark:
-            keep = keep * (all_dark == False)
-        if args.all_dark:
-            keep = keep * (all_dark == True)
-
-    if (args.filter >= 0):
-        if (args.filter == 0):
-            keep = keep * ((xpos%2)==0) * ((ypos%2)==0)
-        if (args.filter == 1):
-            keep = keep * ((xpos%2)==1) * ((ypos%2)==0)
-        if (args.filter == 2):
-            keep = keep * ((xpos%2)==0) * ((ypos%2)==1)
-        if (args.filter == 3):
-            keep = keep * ((xpos%2)==1) * ((ypos%2)==1)
-
-    if (args.gain):
+    # first apply gains if appropriate
+    if args.gain:
         try:
             filename = os.path.join(args.calib, 'lens.npz')
             lens = np.load(filename)            
@@ -95,18 +63,26 @@ def process(filename, args):
         avg_gain = lens['avg_gain']
         gain = np.array([avg_gain[i] for i in index])
         cmean = cmean / gain
-        cvari = cvari / np.square(gain)
+        cvari = cvari / np.square(gain) 
+
+
+    # now select pixels to plot
+    index = np.arange(sum.size)
+    xpos = index % width
+    ypos = index // width
+    keep = np.ones(width*height, dtype=bool)
+
+    if args.no_dark or args.all_dark:
+        try:
+            dark = load_dark(args.calib)
+        except:
+            print("dark pixel file", filename, "does not exist.")
+            return
         
-
-    cmean = cmean[keep]
-    cvari = cvari[keep]
-    index = index[keep]
-    xpos  = xpos[keep]
-    ypos  = ypos[keep]
-
-    if (args.sandbox):
-        print("running development code.")
-        return
+        if args.no_dark:
+            keep &= np.logical_not(dark)
+        if args.all_dark:
+            keep &= dark
 
     if args.hot:
         max_mean = args.hot[0]
@@ -122,88 +98,66 @@ def process(filename, args):
 
         np.savez(hotfile, hot_list=hot_list)
 
-        keep = (hot == False)
-        cmean = cmean[keep]
-        cvari = cvari[keep]
-        index = index[keep]
-        xpos  = xpos[keep]
-        ypos  = ypos[keep]
-        
+        keep &= (hot == False)
+         
+
+    if args.by_filter or args.by_radius:
+
+        # 4 subplots 
+
+        if args.by_filter:
+            posA = keep * ((xpos%2)==0) * ((ypos%2)==0)
+            posB = keep * ((xpos%2)==1) * ((ypos%2)==0)
+            posC = keep * ((xpos%2)==0) * ((ypos%2)==1)
+            posD = keep * ((xpos%2)==1) * ((ypos%2)==1)
+        else:
+            rs     = ((xpos - width/2.0)**2 + (ypos - height/2.0)**2)
+            norm   = (width/2.0)**2 + (height/2.0)**2
+            rs     = rs/norm
+
+            posA = keep * (rs >= 0.75)
+            posB = keep * (rs < 0.75) * (rs >= 0.5) 
+            posC = keep * (rs < 0.5) * (rs >= 0.25) 
+            posD = keep * (rs < 0.25) 
 
 
+        kwargs = {
+                'norm': LogNorm(),
+                'bins': [500, 500],
+                'range':[[0,args.max_mean],[0,args.max_var]],
+                } 
+ 
+        plt.subplot(221)
+        plt.hist2d(cmean[posA],cvari[posA],**kwargs)
+        plt.xlabel("mean")
+        plt.ylabel("variance")    
+        plt.subplot(222)
+        plt.hist2d(cmean[posB],cvari[posB],**kwargs)
+        plt.xlabel("mean")
+        plt.ylabel("variance")    
+        plt.subplot(223)
+        plt.hist2d(cmean[posC],cvari[posC],**kwargs)
+        plt.xlabel("mean")
+        plt.ylabel("variance")    
+        plt.subplot(224)
+        plt.hist2d(cmean[posD],cvari[posD],**kwargs)
+        plt.xlabel("mean")
+        plt.ylabel("variance")    
+        plt.show() 
 
-    if (not args.skip_default):
-        
+    else:
         plt.hist2d(cmean,cvari,norm=LogNorm(),bins=[500,500],range=[[0,args.max_mean],[0,args.max_var]])
         plt.xlabel("mean")
         plt.ylabel("variance")
         
-        if args.save_plot:
-            plot_name = "plots/mean_var_calib.pdf" if args.calib \
-                    else "plots/mean_var.pdf"
-            print("saving plot to file:  ", plot_name)
-            plt.savefig(plot_name)
+
+    if args.save_plot:
+        plot_name = "plots/mean_var_calib.pdf" if args.calib \
+                else "plots/mean_var.pdf"
+        print("saving plot to file:  ", plot_name)
+        plt.savefig(plot_name)
         
-        plt.show()
-
-
-    if (args.by_filter):
-        posA = ((xpos%2)==0) * ((ypos%2)==0)
-        posB = ((xpos%2)==1) * ((ypos%2)==0)
-        posC = ((xpos%2)==0) * ((ypos%2)==1)
-        posD = ((xpos%2)==1) * ((ypos%2)==1)
-
-        #posA = ((ypos%4)==0) 
-        #posB = ((ypos%4)==1) 
-        #posC = ((ypos%4)==2) 
-        #posD = ((ypos%4)==3) 
-
-
-        plt.subplot(2,2,1)
-        plt.hist2d(cmean[posA],cvari[posA],norm=LogNorm(),bins=[500,500],range=[[0,args.max_mean],[0,args.max_var]])
-        plt.xlabel("mean")
-        plt.ylabel("variance")    
-        plt.subplot(2,2,2)
-        plt.hist2d(cmean[posB],cvari[posB],norm=LogNorm(),bins=[500,500],range=[[0,args.max_mean],[0,args.max_var]])
-        plt.xlabel("mean")
-        plt.ylabel("variance")    
-        plt.subplot(2,2,3)
-        plt.hist2d(cmean[posC],cvari[posC],norm=LogNorm(),bins=[500,500],range=[[0,args.max_mean],[0,args.max_var]])
-        plt.xlabel("mean")
-        plt.ylabel("variance")    
-        plt.subplot(2,2,4)
-        plt.hist2d(cmean[posD],cvari[posD],norm=LogNorm(),bins=[500,500],range=[[0,args.max_mean],[0,args.max_var]])
-        plt.xlabel("mean")
-        plt.ylabel("variance")    
-        plt.show()
-
-    rs     = ((xpos - width/2.0)**2 + (ypos - height/2.0)**2)
-    norm   = (width/2.0)**2 + (height/2.0)**2
-    rs     = rs/norm
-
-    if (args.by_radius):
-        posA = (rs >= 0.75)
-        posB = (rs < 0.75) * (rs >= 0.5) 
-        posC = (rs < 0.5) * (rs >= 0.25) 
-        posD = (rs < 0.25) 
-
-        plt.subplot(2,2,1)
-        plt.hist2d(cmean[posA],cvari[posA],norm=LogNorm(),bins=[500,500],range=[[0,args.max_mean],[0,args.max_var]])
-        plt.xlabel("mean")
-        plt.ylabel("variance")    
-        plt.subplot(2,2,2)
-        plt.hist2d(cmean[posB],cvari[posB],norm=LogNorm(),bins=[500,500],range=[[0,args.max_mean],[0,args.max_var]])
-        plt.xlabel("mean")
-        plt.ylabel("variance")    
-        plt.subplot(2,2,3)
-        plt.hist2d(cmean[posC],cvari[posC],norm=LogNorm(),bins=[500,500],range=[[0,args.max_mean],[0,args.max_var]])
-        plt.xlabel("mean")
-        plt.ylabel("variance")    
-        plt.subplot(2,2,4)
-        plt.hist2d(cmean[posD],cvari[posD],norm=LogNorm(),bins=[500,500],range=[[0,args.max_mean],[0,args.max_var]])
-        plt.xlabel("mean")
-        plt.ylabel("variance")    
-        plt.show()
+    plt.show()
 
     return
 
@@ -240,13 +194,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Plot mean and variance.', epilog=example_text,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('files', metavar='FILE', nargs='+', help='file to process')
-    parser.add_argument('--skip_default',action="store_true", help="skip the default plot or plots.")
     parser.add_argument('--sandbox',action="store_true", help="run sandbox code and exit (for development).")
     parser.add_argument('--raw',action="store_true", help="input files have not been preprocessed.")
     parser.add_argument('--max_var',  type=float, default=800,help="input files have not been preprocessed.")
     parser.add_argument('--max_mean', type=float, default=200,help="input files have not been preprocessed.")
     parser.add_argument('--no_dark',action="store_true", help="drop dark pixels from all plots.")
-    parser.add_argument('--filter', metavar='POS', type=int, default=-1,help="only include pixels at filter position POS.")
     parser.add_argument('--all_dark',action="store_true", help="drop non-dark pixels from all plots.")
     parser.add_argument('--by_filter',action="store_true", help="produce 4 plots for each corner of the 2x2 filter arrangement.")
     parser.add_argument('--by_radius',action="store_true", help="produce 4 plots at three different locations from radius.")

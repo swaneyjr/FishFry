@@ -63,40 +63,31 @@ def fit_line(x, y, xmax=np.inf, ymax=np.inf):
     print('size of y: ', y.size)
    
     # weighted regression for calculating gain and intercept
-    where = (x < xmax) & (y < ymax)
-    count = np.sum(where, axis=0)
+    valid = (x < xmax) & (y < ymax)
+    count = np.sum(valid, axis=0)
     
-    xvalid = np.where(where, x, 0)
-    yvalid = np.where(where, y, 0)
-    w = 1 #np.where(y>0, 1/y**2, 0)
-    
-    xw = xvalid*w
-    yw = yvalid*w
+    w = np.ones(y.shape)
+    w[np.logical_not(valid)] = np.nan
 
-    ex     = np.sum(xw, axis=0) / count
-    ey     = np.sum(yw, axis=0) / count
-    exx    = np.sum(xw**2, axis=0) / count
-    exy    = np.sum(xw*yw, axis=0) / count
-    eyy    = np.sum(yw**2, axis=0) / count
-    ew     = np.sum(w, axis=0) / count
-    denom  = exx*ew - ex*ex
+    xw = x*w
+    yw = y*w
 
-    a = (exy*ew - ex*ey) / denom
-    b = (exx*ey - exy*ex) / denom
-    
+    del valid
+
+    ex     = np.nanmean(xw, axis=0)
+    ey     = np.nanmean(yw, axis=0)
+    exx    = np.nanmean(xw**2, axis=0)
+    exy    = np.nanmean(xw*yw, axis=0)
+    eyy    = np.nanmean(yw**2, axis=0)
+    ew     = np.nanmean(w, axis=0)
+
     # calculate R^2 values    
-    r2_numer = (exy - ex*ey)**2
-    r2_denom = (exx - ex**2) * (eyy - ey**2)
-    r2 = np.divide(r2_numer, r2_denom)
+    r2 = (exy*ew - ex*ey)**2 / (exx*ew - ex**2) / (eyy*ew - ey**2)
 
+    a = (exy*ew - ex*ey) / (exx*ew - ex**2)
+    b = ey - a*ex
+     
     print('line fitted. \nall intermediate values computed:')
-    print('ex:      ', ex)
-    print('ex.shape ', ex.shape)
-    print('ey:      ', ey)
-    print('exx:     ', exx)
-    print('exy:     ', exy)
-    print('ew:      ', ew)
-    print('denom:   ', denom)
     print('a:       ', a)
     print('b:       ', b)
     print('R^2:       ', r2)
@@ -137,7 +128,7 @@ def plot_points(nx,ny,mean, variance, gain, intercept, rsq):
     
         a = gain[idx]
         b = intercept[idx]
-        x = np.linspace(0,1023, 100)
+        x = np.linspace(0, 1.1*plt_x.max(), 100)
         y = a * x + b
         r2 = rsq[idx]
 
@@ -161,7 +152,7 @@ def plot_hist(x, y, xlabel=None, ylabel=None, title=None):
     xmax = xs[-idx]
     ymax = ys[-idx]
 
-    plt.hist2d(xs, ys, bins=(200,200), 
+    plt.hist2d(x, y, bins=(200,200), 
             range=((xmin,xmax), (ymin, ymax)), 
             norm=LogNorm())
     
@@ -310,8 +301,8 @@ if __name__ == "__main__":
     if args.scatterplot or args.plot_all:
         n_figs += 1
         plt.figure(n_figs, figsize=(10,6))
-        plot_hist(gain, black_level, 
-                xlabel='Gain', ylabel='Black level')
+        plot_hist(gain, rsq, 
+                xlabel='Gain', ylabel=r'$R^2$')
 
     if n_figs:
         plt.show()

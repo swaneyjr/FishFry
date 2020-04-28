@@ -10,159 +10,84 @@ from geometry import load_res
 
 import argparse
 
-def process(filename, args):
-    # plots to show:
-    meanvar = True
-    border  = True
-    pattern = True
-    alldark = True
+def load_dark(calib):
+    width, height = load_res(calib)
+    fdark = np.load(os.path.join(calib, 'dark.npz'))
+
+    dark_x = fdark['dark_x']
+    dark_y = fdark['dark_y']
+
+    px = fdark['px']
+    py = fdark['py']
+
+    fdark.close()
+
+    dark = np.zeros(width*height, dtype=bool)
+    
+    index = np.arange(width*height)
+    x = index % width
+    y = index // width
+ 
+    for ix, iy in zip(dark_x, dark_y):
+        dark[(x % px == ix) & (y % py == iy)] = True 
+    
+    return dark
+
+def find_dark(px, py, thresh=None, calib='calib', commit=False):
 
     # load the image geometry from the calibrations:
-    width, height = load_res(args.calib)
+    width, height = load_res(calib)
+    fgain = np.load(os.path.join(calib, 'gain.npz'))
+    gain = fgain.f.gain.reshape(height, width)
+    fgain.close()
 
-    print("processing file: ", filename)
-    try:
-        npz = np.load(filename)
-    except:
-        print("could not process file", filename, "as .npz file.  Use --raw option?")
-        return
+    # crop to fit the dark pixel period
+    crop_x = (width // px - 2) * px
+    crop_y = (height // py - 2) * py
 
-    exposure = npz['exposure']
-    sens     = npz['sens']
-    sum      = npz['sum']
-    ssq      = npz['ssq']
-    num     = npz['num']
-    index = np.arange(num.size)
+    idxx = (width - crop_x) // 2
+    idxy = (height - crop_y) // 2
 
-    empty = (num == 0)
-    num[empty]=1
-    mean = sum / num
-    vari  = ssq / num - mean**2
-
-    max_mean = 3*np.mean(mean)
-    max_vari = 3*np.mean(vari)
-    nom_slope = max_vari / max_mean;
-
-    A = nom_slope * args.slope
-    B = max_mean * args.offset
+    gain_crop = gain[idxy:-idxy, idxx:-idxx]
+    gain_ds = gain_crop.reshape(crop_y//py, py, crop_x//px, px)
     
-    xcut = np.array([0,max_mean])
-    ycut = A*(xcut-B)
+    # normalize and center at 0
+    gain_norm = np.nanmean(gain_ds, axis=(1,3))
+    gain_ds /= gain_norm.reshape(crop_y//py, 1, crop_x//px, 1)
+    gain_ds -= 1
 
-    if (not args.skip_prelim):
-        plt.hist2d(mean,vari,norm=LogNorm(),bins=[100,100],range=[[0,max_mean],[0,max_vari]])
-        plt.plot(xcut,ycut,"-")
-        plt.xlabel("mean")
-        plt.ylabel("variance")
-        plt.savefig("plots/dark_cut.pdf")
-        plt.show()
+    gain_mean = np.nanmean(gain_ds, axis=(0,2))
+    gain_std = np.nanstd(gain_ds, axis=(0,2))
 
-    dark = (mean < max_mean) & (vari < max_vari) & (vari < (A*(mean - B)))
-                                
-    if (not args.skip_prelim):                  
-        plt.hist2d(mean[dark],vari[dark],norm=LogNorm(),bins=[100,100],range=[[0,max_mean],[0,max_vari]])
-        plt.plot(xcut,ycut,"-")
-        plt.xlabel("mean")
-        plt.ylabel("variance")
-        plt.savefig("plots/dark_cut_applied.pdf")
-        plt.show()
+    plt.figure(figsize=(12,6))
+    plt.subplot(121)
+    plt.imshow(gain_mean, cmap='coolwarm')
+    plt.title('Mean')
+    plt.colorbar()
 
-    xpos = index % width
-    ypos = index // width
-
-    darkx = xpos[dark]
-    darky = ypos[dark]
-
-    xmin = np.min(darkx)
-    xmax = np.max(darkx)
-    ymin = np.min(darky)
-    ymax = np.max(darky)
-
-    print "minimum dark x value:  ", xmin
-    print "maximum dark x value:  ", xmax
-    print "minimum dark y value:  ", ymin
-    print "maximum dark y value:  ", ymax
-   
-    best   = 500*500
-    best_i = args.period[0]
-    best_j = args.period[1]
-
-    print "Scanning for the dark pixel period.  This might take awhile:   use --period if you know it."
-
-    if (best_i == 0):
-        for i in range(1,100):
-            for j in range(1,100):
-                if ((i%10)|(j%10)==0):
-                    print "checking period x: ", i, " y: ", j                
-                cx = darkx % i
-                cy = darky % j
-                flat = cy*i + cx
-                flat = np.unique(flat)
-                occ = (flat.size)/float(i*j)            
-                if (occ < best):
-                    best = occ
-                    best_i = i
-                    best_j = j
-
-    print "dark pixel pattern has period (x): ", best_i, " (y) ", best_j, "\n";
-
-    cx = darkx % best_i
-    cy = darky % best_j
-    flat = cy*best_i + cx
-    flat = np.unique(flat)
-    ux = flat % best_i
-    uy = flat // best_i
-    
-    plt.plot(ux,uy,".", color="blue")
-    plt.xlabel("x position")
-    plt.ylabel("y position")
-    plt.xlim(0,best_i)
-    plt.ylim(0,best_j)
-    plt.savefig("plots/dark_pattern.pdf")
+    plt.subplot(122)
+    plt.imshow(gain_std, cmap='coolwarm')
+    plt.title('Standard deviation')
+    plt.colorbar()
     plt.show()
 
-    # now build the entire dark pixel map:
-    full  = np.arange(width*height)
-    fullx = full % width
-    fully = full // width
-    mapf = fullx%best_i + (fully%best_j)*best_i
-    all_dark = np.in1d(mapf,flat)
-    # future python:
-    #all_dark = np.isin(mapf,flat)
+    if not thresh: return
 
-    # remove borders:
-    all_dark = all_dark & (fullx>=xmin) & (fully>=ymin) & (fullx<=xmax) & (fully<=ymax)
+    dark_y, dark_x = np.argwhere(gain_mean < -thresh).transpose()
+    dark_x = (dark_x + idxx) % px
+    dark_y = (dark_y + idxy) % py
 
-    if (args.commit):
-        print "saving dark pixel map to calibration directory."
-        filename = os.path.join(args.calib, 'all_dark.npy')
-        np.save(filename, all_dark)
+    print(dark_x.size, 'dark pixels found')
 
-    plt.subplot(2,1,1)
-    plt.hist2d(mean[(all_dark==False)],vari[(all_dark==False)],norm=LogNorm(),bins=[100,100],range=[[0,max_mean],[0,max_vari]])
-    plt.xlabel("mean")
-    plt.ylabel("variance")
-    plt.subplot(2,1,2)
-    plt.hist2d(mean[(all_dark==True)],vari[(all_dark==True)],norm=LogNorm(),bins=[100,100],range=[[0,max_mean],[0,max_vari]])
-    plt.xlabel("mean")
-    plt.ylabel("variance")
-    plt.savefig("plots/dark_final.pdf")
-    plt.show()
-
-    return 
-
-    #
-    # investigate dark pixels with high variance:
-    # 
-
-    strange = all_dark & (vari > 7)
-
-    plt.plot(fullx[strange],fully[strange],"o")
-    plt.xlabel("x")
-    plt.ylabel("y")
-    plt.show();
-
-
+    if commit:
+        outname = os.path.join(calib, 'dark.npz')
+        print('saving to', outname)
+        np.savez(outname,
+                dark_x=dark_x,
+                dark_y=dark_y,
+                px=px,
+                py=py)
+    
     
 if __name__ == "__main__":
     example_text = '''examples:
@@ -171,13 +96,10 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description='Combine multiple pixelstats data files.', epilog=example_text,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('file', metavar='FILE', nargs=1, help='file to process')
     parser.add_argument('--calib', default='calib', help='directory to store calibration files')
-    parser.add_argument('--skip_prelim',action="store_true", help="skip the preliminary plots.")
-    parser.add_argument('--slope', metavar='SLOPE', type=float, help='set slope factor to SLOPE (default: %(default).2f)', default=0.6)
-    parser.add_argument('--offset', metavar='OFFSET', type=float, help='set offset factor to OFFSET (default: %(default).2f)', default=0.05)
     parser.add_argument('--commit',action="store_true", help="save dark pixel map to calibration directory")
-    parser.add_argument('--period', nargs=2, metavar=("X","Y"), type=int,help="specify dark pixel pattern period in x and y", default=[0,0])
+    parser.add_argument('--period', nargs=2, metavar=("X","Y"), type=int,help="specify dark pixel pattern period in x and y", default=[64,64])
+    parser.add_argument('--thresh', type=float, help='absolute value of deviation for counting dark pixels')
     args = parser.parse_args()
 
-    process(args.file[0], args)
+    find_dark(*args.period, calib=args.calib, thresh=args.thresh, commit=args.commit)
