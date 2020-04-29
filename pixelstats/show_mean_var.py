@@ -8,6 +8,7 @@ from matplotlib.colors import LogNorm
 
 from geometry import load_res
 from dark_pixels import load_dark
+from lens_shading import load_weights
 
 import argparse
 
@@ -32,41 +33,41 @@ def process(filename, args):
             print("could not process file ", filename, " as .npz file.  Use --raw option?")
             return
 
-        sum      = npz['sum']
-        ssq      = npz['ssq']
+        sum     = npz['sum']
+        ssq     = npz['ssq']
         num     = npz['num'] 
     
     cmean = sum / num
     cvari = (ssq / num - cmean**2) * num / (num-1)
 
+    # apply gains if appropriate
+    if args.gain:
+        try:
+            wgt = load_weights(args.calib).flatten()
+        except IOError:
+            print("weights not found.")
+            return
+         
+        cmean = cmean * wgt
+        cvari = cvari * wgt**2
+
     # first show spatial distribution
     plt.figure(1, figsize=(6,8))
+
     plt.subplot(211)
-    plt.imshow(cmean.reshape(height, width), norm=LogNorm(), cmap='coolwarm')
+    plt.imshow(cmean.reshape(height, width), 
+            cmap='seismic', vmax=args.max_mean)
     plt.colorbar()
 
     plt.subplot(212)
-    plt.imshow(cvari.reshape(height, width), norm=LogNorm(), cmap='coolwarm')
+    plt.imshow(cvari.reshape(height, width), #norm=LogNorm(), 
+            cmap='seismic', vmax=args.max_var)
     plt.colorbar()
 
     # now do 2D histogram(s) for mean and variance 
     plt.figure(2, figsize=(10,8))
-
-    # first apply gains if appropriate
-    if args.gain:
-        try:
-            filename = os.path.join(args.calib, 'lens.npz')
-            lens = np.load(filename)            
-        except:
-            print("average gain file", filename, "does not exist.")
-            return
-        avg_gain = lens['avg_gain']
-        gain = np.array([avg_gain[i] for i in index])
-        cmean = cmean / gain
-        cvari = cvari / np.square(gain) 
-
-
-    # now select pixels to plot
+ 
+    # select pixels to plot
     index = np.arange(sum.size)
     xpos = index % width
     ypos = index // width
@@ -75,8 +76,8 @@ def process(filename, args):
     if args.no_dark or args.all_dark:
         try:
             dark = load_dark(args.calib)
-        except:
-            print("dark pixel file", filename, "does not exist.")
+        except IOError:
+            print("dark pixel file does not exist.")
             return
         
         if args.no_dark:
@@ -196,8 +197,8 @@ if __name__ == "__main__":
     parser.add_argument('files', metavar='FILE', nargs='+', help='file to process')
     parser.add_argument('--sandbox',action="store_true", help="run sandbox code and exit (for development).")
     parser.add_argument('--raw',action="store_true", help="input files have not been preprocessed.")
-    parser.add_argument('--max_var',  type=float, default=800,help="input files have not been preprocessed.")
-    parser.add_argument('--max_mean', type=float, default=200,help="input files have not been preprocessed.")
+    parser.add_argument('--max_var',  type=float, default=5000,help="variance limit for plots")
+    parser.add_argument('--max_mean', type=float, default=1023,help="mean limit for plots")
     parser.add_argument('--no_dark',action="store_true", help="drop dark pixels from all plots.")
     parser.add_argument('--all_dark',action="store_true", help="drop non-dark pixels from all plots.")
     parser.add_argument('--by_filter',action="store_true", help="produce 4 plots for each corner of the 2x2 filter arrangement.")

@@ -10,6 +10,20 @@ import argparse
 import sys
 import os
 
+def load_weights(calib):
+    f_lens = np.load(os.path.join(calib, 'lens.npz'))
+    
+    gain = f_lens['lens']
+    ds   = f_lens['down_sample']
+
+    f_lens.close()
+
+    wgt = np.where(gain > 0, 1/gain, 0)
+    wgt /= wgt.max()
+
+    return np.repeat(np.repeat(wgt, ds, axis=0), ds, axis=1)
+    
+
 def calculate(calib, rsq_thresh=0, calib_dark=True, calib_hot=True, ds=4):
 
     print('loading image geometry')
