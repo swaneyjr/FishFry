@@ -3,20 +3,6 @@
 import numpy as np
 import os
 
-def down_sample(width, height, dsx, dsy):
-    ex = 0
-    ey = 0
-    if (width % dsx > 0):
-        ex = 1
-    if (height % dsy > 0):
-        ey = 1
-    index = np.arange(width*height, dtype=int)    
-    down = (index % width) / dsx + ((index / width) / dsy) * (width/dsx + ex)
-    nx = (width / dsx + ex) 
-    ny = (height / dsy + ey)
-
-    return down, nx, ny
-
 def load_res(calib_dir): 
     # load the image geometry:
     try:

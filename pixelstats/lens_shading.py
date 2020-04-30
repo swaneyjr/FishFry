@@ -3,8 +3,9 @@
 
 from unpack import *
 from matplotlib.colors import LogNorm
-from geometry import load_res, down_sample
+from geometry import load_res
 from dark_pixels import load_dark
+from hot_pixels import load_hot
 import matplotlib.pyplot as plt
 import argparse
 import sys
@@ -59,18 +60,15 @@ def calculate(calib, rsq_thresh=0, calib_dark=True, calib_hot=True, ds=4):
             dark = load_dark(calib)
             gain[dark] = np.nan
         except IOError:
-            print("dark pixel file", filename, "does not exist.")
+            print("dark pixel file could not be processed")
      
     if calib_hot:
         try:
             print('loading hot pixels')
-            filename = os.path.join(calib, "hot_online.npz")
-            hotf  = np.load(filename)
-            hot = hotf['hot_list']
-            hotf.close()
+            hot = load_hot(calib)
             gain[hot] = np.nan
         except IOError:
-            print("could not process file ", filename, " as .npz file.") 
+            print("hot pixel file could not be processed") 
 
     print('beginning to downsample')
 

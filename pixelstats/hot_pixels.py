@@ -9,6 +9,22 @@ from geometry import load_res
 from dark_pixels import load_dark
 from lens_shading import load_weights
 
+def load_hot(calib_dir, offline=False):
+    f_online = os.path.join(calib_dir, 'hot_online.npz')
+    hot = f_online['hot_list']
+    f_online.close()
+
+    if offline:
+        try:
+            f_offline = os.path.join(calib_dir, 'hot_offline.npz')
+            off = f_offline['hot_list']
+            hot = np.unique(np.hstack([hot, off]))
+            f_offline.close()
+        except IOError:
+            pass
+
+    return hot
+
 def export(hot_cells, outfile):
     print('exporting hotcells as .npz file')
     flat_hotcell_list = hot_cells.flatten()
