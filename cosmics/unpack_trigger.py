@@ -69,7 +69,7 @@ def interpret_header(header, param):
     if param in header_map:
         return header[header_map[param]]
     else:
-        print("ERROR:  invalid parameter ", param)
+        print("ERROR:  invalid parameter", param)
         exit(0)
 
 def get_trigger(header):
@@ -83,21 +83,21 @@ def show_header(header):
     denom      = interpret_header(header, "denom")
     hsize       = header.size-2*num_thresh
     threshold, prescale = get_trigger(header)
-    print("additional header size:  ", hsize-1)
-    print("version:                 ", interpret_header(header, "version"))
-    print("width:                   ", interpret_header(header, "width"))
-    print("height:                  ", interpret_header(header, "height"))
-    print("sensitivity:             ", interpret_header(header, "sens"))
-    print("exposure:                ", interpret_header(header, "exposure"))
-    print("hot_hash:                ", interpret_header(header, "hot_hash"))
-    print("wgt_hash:                ", interpret_header(header, "wgt_hash"))
-    print("region_dx:               ", interpret_header(header, "region_dx"))
-    print("region_dy:               ", interpret_header(header, "region_dy"))
-    print("denom:                   ", interpret_header(header, "denom"))
-    print("num_zerobias:            ", interpret_header(header, "num_zerobias"))
-    print("num_thresh:              ", num_thresh) 
-    print("thresholds:              ", threshold)
-    print("prescales:               ", prescale)
+    print("header size:     ", hsize-1)
+    print("version:         ", interpret_header(header, "version"))
+    print("width:           ", interpret_header(header, "width"))
+    print("height:          ", interpret_header(header, "height"))
+    print("sensitivity:     ", interpret_header(header, "sens"))
+    print("exposure:        ", interpret_header(header, "exposure"))
+    print("hot_hash:        ", interpret_header(header, "hot_hash"))
+    print("wgt_hash:        ", interpret_header(header, "wgt_hash"))
+    print("region_dx:       ", interpret_header(header, "region_dx"))
+    print("region_dy:       ", interpret_header(header, "region_dy"))
+    print("denom:           ", interpret_header(header, "denom"))
+    print("num_zerobias:    ", interpret_header(header, "num_zerobias"))
+    print("num_thresh:      ", num_thresh) 
+    print("thresholds:      ", threshold)
+    print("prescales:       ", prescale)
  
     
 

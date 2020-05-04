@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 
 import sys
-from unpack_hist import *
+
+import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
+
+from unpack_hist import unpack_all, show_header, interpret_header
 
 import argparse
 
 def process(filename, args):
 
     # load data:
-    header,hist_uncal,hist_nohot,hist_calib = unpack_all(filename)
+    header,hist_cln,hist_hot,hist_cal = unpack_all(filename)
 
     show_header(header)
 
@@ -19,22 +22,17 @@ def process(filename, args):
     height        = interpret_header(header, "height")
     hist_prescale = interpret_header(header, "hist_prescale")
 
+    # need to convert to python primitive types to prevent overflow
+    print("max entries:    ", int(images) * int(width) * int(height) // hist_prescale)
+    print("buffer size:    ", 2**63)
     
-    print("images:         ", images)
-    print("width:          ", width)
-    print("height:         ", height)
-    print("hist_prescale:  ", hist_prescale)
+    print("total samples, clean:  ", np.sum(hist_cln))
+    print("total samples, hot:    ", np.sum(hist_hot))
+    print("total samples, calib:  ", np.sum(hist_cal))
 
-    print("max entries:    ", images * width * height / hist_prescale)
-    print("buffer size:    ", 2**31)
-    
-    print("sum of entries, uncal:  ", np.sum(hist_uncal))
-    print("sum of entries, unhot:  ", np.sum(hist_unhot))
-    print("sum of entries, calib:  ", np.sum(hist_calib))
-
-    print(hist_uncal[:100])
-    print(hist_unhot[:100])
-    print(hist_calib[:100])
+    print('clean:', hist_cln[:100], '...\n')
+    print('hot:  ', hist_hot[:100], '...\n')
+    print('calib:', hist_cal[:100], '...')
 
 
 if __name__ == "__main__":
@@ -42,7 +40,7 @@ if __name__ == "__main__":
 
     ...'''
     
-    parser = argparse.ArgumentParser(description='Plot rate from Cosmics.', epilog=example_text,
+    parser = argparse.ArgumentParser(description='Print histogram data.', epilog=example_text,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('files', metavar='FILE', nargs='+', help='file to process')
     parser.add_argument('--sandbox',action="store_true", help="run sandbox code and exit (for development).")

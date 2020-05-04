@@ -4,69 +4,56 @@
 
 import sys
 import argparse
-import datetime
+from datetime import datetime
 
-from unpack_trigger import *
-from calibrate import *
+from unpack_trigger import interpret_header, unpack_all
+from calibrate import Calibrator
 
-width = None
-height = None
-
-def process(filename,args):
+def log_framerate(filename):
     header,px,py,highest,region,timestamp,millistamp,images,dropped = unpack_all(filename)
 
-    if (args.framerate):
-        tmin     = np.min(millistamp)
-        tmax     = np.max(millistamp)
-        elapsed  = (tmax - tmin)*1E-3
-        exposure = interpret_header(header, "exposure")*1E-9
-        if (images > 0):
-            duration = elapsed / images
-        else:
-            duration = 0
-        dead     = (duration - exposure) / duration
+    tmin     = np.min(millistamp)
+    tmax     = np.max(millistamp)
+    elapsed  = (tmax - tmin)*1E-3
+    exposure = interpret_header(header, "exposure")*1E-9
+    duration = elapsed / images if images else 0
+    dead     = (duration - exposure) / duration
 
-        print("images:              ", images)
-        print("first image:         ", tmin, " -> ", datetime.datetime.fromtimestamp(tmin*1E-3))   
-        print("last image:          ", tmax, " -> ", datetime.datetime.fromtimestamp(tmax*1E-3))
-        print("interval (s):        ", elapsed)
-        print("frame duration (s):  ", duration)
-        print("exposure (s):        ", exposure)
-        print("deadtime frac:       ", dead)
-        return
+    print("images:              ", images)
+    print("first image:         ", tmin, " -> ", datetime.fromtimestamp(tmin*1E-3))   
+    print("last image:          ", tmax, " -> ", datetime.fromtimestamp(tmax*1E-3))
+    print("interval (s):        ", elapsed)
+    print("frame duration (s):  ", duration)
+    print("exposure (s):        ", exposure)
+    print("deadtime frac:       ", dead)
 
-    if not args.raw:
-        if not width or not height:
-            width = interpret_header(header,"width")
-            height = interpret_header(header,"height")
+def log_regions(filename, calibrator=None, triggered=True, zerobias=True):
+    header,px,py,highest,region,timestamp,millistamp,images,dropped = unpack_all(filename)
 
-        dx = interpret_header(header,"region_dx")
-        dy = interpret_header(header,"region_dy")
-        region = calibrate_region(px,py,region,dx,dy,width,height,args.calib)
+    if calibrator:
+        region = calibrator.calibrate_region(px,py,region,header)
+
+    dx = interpret_header(header,"region_dx")
+    dy = interpret_header(header,"region_dy")
 
     num_region = region.shape[0]
-    count = 0
     for i in range(num_region):
-        h = highest[i];
-        if (args.triggered and (h==0)):
-            continue
-        if (args.zerobias and (h!=0)):
-            continue
-        print("timestamp:    ", timestamp[i]))
-        print("millistamp:   ", millistamp[i], " -> ", datetime.datetime.fromtimestamp(millistamp[i]*1E-3))
+        h = highest[i]
+        if not triggered and h==0: continue
+        if not zerobias and h!=0: continue
+        print("timestamp:    ", timestamp[i])
+        print("millistamp:   ", millistamp[i], " -> ", datetime.fromtimestamp(millistamp[i]*1E-3))
         print("px:           ", px[i])
         print("py:           ", py[i])
         print("highest:      ", h)
-        print("region:       ", region[i])
-        count += 1
-        if (args.short):
-            if (count >= 100):
-                break
+        print("region:       ")
+        print(region[i].reshape(2*dy+1,2*dx+1))
+        print()
 
     print("images:                   ", images)
     print("total number of regions:  ", num_region)
-    print("regions shown:            ", count)
     print("total dropped triggers:   ", dropped)
+    print()
     
     
 if __name__ == "__main__":
@@ -78,15 +65,24 @@ if __name__ == "__main__":
     parser.add_argument('files', metavar='FILE', nargs='+', help='file to process')
     parser.add_argument('--triggered',action="store_true", help="dump only triggered regions")
     parser.add_argument('--zerobias',action="store_true", help="dump only zero-bias regions")
-    parser.add_argument('--short',action="store_true", help="run over small amount of data")
     parser.add_argument('--calib',default='calib', help='location of calibration directory')
     parser.add_argument('--raw',action="store_true", help="do not apply weights to data")
     parser.add_argument('--framerate',action="store_true", help="calculate framerate and exit")
 
     args = parser.parse_args()
 
+    if args.framerate:
+        for filename in args.files:
+            print('processing file:', filename)
+            log_framerate(filename)
+        quit()
+
+    calibrator = Calibrator(args.calib) if not args.raw else None
+
     for filename in args.files:
         print("processing file:  ", filename)
-        process(filename, args)
+        log_regions(filename, calibrator, 
+                triggered=(not args.zerobias),
+                zerobias=(not args.triggered))
 
         

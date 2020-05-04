@@ -10,7 +10,7 @@ from dark_pixels import load_dark
 from lens_shading import load_weights
 
 def load_hot(calib_dir, offline=False):
-    f_online = os.path.join(calib_dir, 'hot_online.npz')
+    f_online = np.load(os.path.join(calib_dir, 'hot_online.npz'))
     hot = f_online['hot_list']
     f_online.close()
 

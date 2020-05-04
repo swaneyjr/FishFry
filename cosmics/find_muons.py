@@ -3,44 +3,28 @@
 import sys
 import os
 import argparse
-import datetime
+from datetime import datetime
 
 import numpy as np
 import matplotlib.pyplot as plt
 
-from unpack_trigger import *
-from calibrate import *
+from unpack_trigger import unpack_all, get_trigger
+from calibrate import Calibrator
 
 import ROOT as r
 
-all_time = np.array([])
-all_trig = np.array([]).astype(int)
-all_raw = np.array([]).astype(int)
-all_x = np.array([]).astype(int)
-all_y = np.array([]).astype(int)
 
-width = None
-height = None
+def process(filename, calibrator, hot_list=None, verbose=False):
 
-def process(filename, calib, hot_list=None, verbose=False):
-
-    global all_time, all_trig, all_raw, all_x, all_y
-    global width, height
     header,px,py,highest,raw_region,timestamp,millistamp,images,dropped = unpack_all(filename)
- 
-    if not width or not height:
-        width  = interpret_header(header, "width")
-        height = interpret_header(header, "height")
 
-    dx = interpret_header(header,"region_dx")
-    dy = interpret_header(header,"region_dy")
-    region = calibrate_region(px,py,raw_region,dx,dy,width,height,calib)
-    icenter = (2*dx + 1)*(2*dy + 1)//2
+    cal_region = calibrator.calibrate_region(px,py,raw_region,header)
+    icenter = raw_region.shape[1]//2
    
     threshold,prescale = get_trigger(header)
  
     if np.any(hot_list):
-        index = py*width + px
+        index = py*calibrator.width + px
         hot = np.in1d(index, hot_list)
         keep = (highest==prescale.size) & np.logical_not(hot)
     
@@ -51,32 +35,49 @@ def process(filename, calib, hot_list=None, verbose=False):
         print("found ", np.sum(hot), " hot regions.")
         print("found ", np.sum(np.logical_not(hot)), " non-hot regions.") 
     
+    t = millistamp[keep]*1E-3
+    x = px[keep]
+    y = py[keep]
+    raw = raw_region[keep,icenter]
+    cal = cal_region[keep,icenter]
 
-    all_time = np.append(all_time, millistamp[keep]*1E-3)
-    all_raw = np.append(all_trig,raw_region[keep,icenter])
-    all_trig = np.append(all_trig,region[keep,icenter])
-    all_x = np.append(all_x, px)
-    all_y = np.append(all_y, py)
+    return t, x, y, raw, cal
+ 
 
+def save_trig(fname, t, x, y, raw, cal):
+    f = r.TFile(args.out, 'recreate')
+    trigs = r.TTree('triggers', 'Triggered events')
 
-def analysis():
-    global all_trig, all_time, all_x, all_y
-    plt.hist(all_trig, bins=np.arange(500), log=True)
-    plt.show()
+    t0 = np.array([t.min()])
+    vx = r.vector('UInt_t')()
+    vy = r.vector('UInt_t')()
+    vraw = r.vector('UInt_t')()
+    vcal = r.vector('UInt_t')()
 
-    time = np.unique(all_time)
-    rate = time.size/time[-1]
+    trigs.Branch('t', vt, 't/D')
+    trigs.Branch('x', vx)
+    trigs.Branch('y', vy)
+    trigs.Branch('raw', vraw)
+    trigs.Branch('cal', vcal)
 
-    
-    print()
+    for i in np.argsort(t):
+        if t[i] > t0:
+            trigs.Fill()
+            vx.clear()
+            vy.clear()
+            vraw.clear()
+            vcal.clear()
+            t0[0] = t[i]
+        
+        vx.push_back(int(x[i]))
+        vy.push_back(int(y[i]))
+        vraw.push_back(int(raw[i]))
+        vcal.push_back(int(trig[i]))
 
-    print("rate:  ", rate)
+    trigs.Fill()
 
-    print("minimum time:  ", np.min(time))
-    print("maximum time:  ", np.max(time))
-    print("start date:    ", datetime.datetime.fromtimestamp(np.min(time)))
-    print("end date:      ", datetime.datetime.fromtimestamp(np.max(time)))
-
+    f.Write()
+    f.Close()
 
 
 if __name__ == "__main__":
@@ -90,7 +91,8 @@ if __name__ == "__main__":
     parser.add_argument('--sandbox',action="store_true", help="run sandbox code and exit (for development).")
     parser.add_argument('--calib', default='calib', help="compare calibrated pixel values.")
     parser.add_argument('--max',  type=int, default=50,help="maximum pixel value in rate plot (x-axis).")
-    parser.add_argument('--out', default='phone.root', help='name of output ROOT file')
+    parser.add_argument('--plot', action='store_true',help='plot histogram of triggered values')
+    parser.add_argument('--out', help='name of output ROOT file')
     parser.add_argument('-v', '--verbose', action='store_true', help='enable verbose output')
     args = parser.parse_args() 
 
@@ -106,42 +108,45 @@ if __name__ == "__main__":
     except:
         print("could not process file ", hot_fname, " as .npz file.") 
 
+    calibrator = Calibrator(args.calib)
+
+    # update these lists
+    all_t   = []  
+    all_x   = []
+    all_y   = []
+    all_raw = []
+    all_cal = []
+
     for filename in args.trig:
         print("processing trigger file:  ", filename, end=end)
-        process(filename, args.calib, hot_list, args.verbose)
-
-    analysis()
-
-    f = r.TFile(args.out, 'recreate')
-    trigs = r.TTree('triggers', 'Triggered events')
-
-    times = np.array([all_time.min()])
-    x = r.vector('UInt_t')()
-    y = r.vector('UInt_t')()
-    raw = r.vector('UInt_t')()
-    val = r.vector('UInt_t')()
-
-    trigs.Branch('t', times, 't/D')
-    trigs.Branch('x', x)
-    trigs.Branch('y', y)
-    trigs.Branch('raw_val', raw)
-    trigs.Branch('val', val)
-
-    for i in np.argsort(all_time):
-        if all_time[i] > times[0]:
-            trigs.Fill()
-            x.clear()
-            y.clear()
-            raw.clear()
-            val.clear()
-            times[0] = all_time[i]
+        t, x, y, raw, cal = process(filename, calibrator, hot_list, args.verbose)
         
-        x.push_back(int(all_x[i]))
-        y.push_back(int(all_y[i]))
-        raw.push_back(int(all_raw[i]))
-        val.push_back(int(all_trig[i]))
+        all_t   += list(t)
+        all_x   += list(x)
+        all_y   += list(y)
+        all_raw += list(raw)
+        all_cal += list(cal)
 
-    trigs.Fill()
+    all_t   = np.array(all_t)
+    all_x   = np.array(all_x)
+    all_y   = np.array(all_y)
+    all_raw = np.array(all_raw)
+    all_cal = np.array(all_cal)
 
-    f.Write()
-    f.Close()
+    time = np.unique(all_t)
+    rate = time.size / (time.max() - time.min())
+    
+    print()
+
+    print("rate:            ", rate)
+    print("minimum time:    ", np.min(time))
+    print("maximum time:    ", np.max(time))
+    print("start date:      ", datetime.fromtimestamp(np.min(time)))
+    print("end date:        ", datetime.fromtimestamp(np.max(time)))
+
+    if args.plot:
+        plt.hist(all_cal, bins=np.arange(500), log=True)
+        plt.show()
+
+    if args.out:
+        save_trig(args.out, all_t, all_x, all_y, all_raw, all_cal)

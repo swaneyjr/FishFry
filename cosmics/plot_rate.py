@@ -1,92 +1,52 @@
 #!/usr/bin/env python3
 
 import sys
-from unpack_hist import *
+import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 
+from unpack_hist import unpack_all, interpret_header
+
 import argparse
 
-def process(filename, args):
 
-    # load data:
-    header,hist_uncal,hist_nohot,hist_calib = unpack_all(filename)
-    images = interpret_header(header, "images")
-    width  = interpret_header(header, "width")
-    height = interpret_header(header, "height")
+def plot(hist, norm=0, cum=False, ax=None, **kwargs): 
 
+    cbins = np.arange(hist.size)
+    rate = hist.astype(float)
 
-    if (args.txtdump):
-        show_header(header)
-        hist_prescale = interpret_header(header, "hist_prescale")    
-        print("images:         ", images)
-        print("width:          ", width)
-        print("height:         ", height)
-        print("hist_prescale:  ", hist_prescale)
-        print("max entries:    ", images * width * height / hist_prescale)
-        print("buffer size:    ", 2**31)
-        print("sum of entries, uncal:  ", np.sum(hist_uncal))
-        print("sum of entries, nohot:  ", np.sum(hist_nohot))
-        print("sum of entries, calib:  ", np.sum(hist_calib))
+    if cum:
+        cbins = cbins[1:]
+        rate = np.sum(rate) - np.cumsum(rate)[:-1]
 
-        print(hist_uncal[:100])
-        print(hist_nohot[:100])
-        print(hist_calib[:100])
-        return
+    err = np.sqrt(rate)
 
-    cbins = np.arange(0,hist_uncal.size) 
-
-    
-    norm = float(width) * float(height) * float(images)
-    rate_uncal = hist_uncal.astype(float)
-    rate_nohot = hist_nohot.astype(float)
-    rate_calib = hist_calib.astype(float)
-
-    rate_uncal[rate_uncal < 0] = 0
-    rate_nohot[rate_nohot < 0] = 0
-    rate_calib[rate_calib < 0] = 0
-
-    err_uncal = rate_uncal**0.5
-    err_nohot = rate_nohot**0.5
-    err_calib = rate_calib**0.5
-        
     # scale counts to a rate:
-    rate_uncal = rate_uncal / norm
-    rate_nohot = rate_nohot / norm
-    rate_calib = rate_calib / norm
-    err_uncal = err_uncal / norm
-    err_nohot = err_nohot / norm
-    err_calib = err_calib / norm
+    if norm:
+        rate /= norm
+        err /= norm
+        plt.ylabel("rate per image")
+    else:
+        plt.ylabel('counts') 
 
-    if (args.inclusive):
-        rate_inc = np.array([np.sum(hist_calib[i:]) for i in range(hist_calib.size)])
-        rate_err = rate_inc**0.5
-        rate_inc = rate_inc.astype(float) / images
-        rate_err = rate_err.astype(float) / images
-        plt.errorbar(cbins,rate_inc,yerr=rate_err,color="black",fmt="o")
-        plt.xlim(0,args.max)
-        #plt.yscale('log')
-        plt.show()
-        
-        prescale = 1;
-        for i in np.arange(rate_inc.size,0,-1)-1:
-            while (rate_inc[i] >= args.num*prescale):
-                print("prescale: ", prescale, "threshold: ", i)
-                prescale *= 8
-        return
-    
-    plt.errorbar(cbins,rate_uncal,yerr=err_uncal,color="black",fmt="o")
-    plt.errorbar(cbins,rate_nohot,yerr=err_nohot,color="red",fmt="o")
-    plt.errorbar(cbins,rate_calib,yerr=err_calib,color="blue",fmt="o")
+    if ax:
+        ax.errorbar(cbins,rate,yerr=err,fmt="o", **kwargs)
+    else:
+        plt.errorbar(cbins,rate,yerr=err,fmt="o", **kwargs)
 
-    plt.xlabel("pixel value")
-    plt.ylabel("rate per pixel per image")
-    plt.yscale('log')
-    plt.xlim(0,args.max)
-    plt.savefig("plots/rate.pdf")
-    plt.show()
+    #plt.savefig("plots/rate.pdf")
     
+
+def calibrate_thresholds(rate, n_trig):
+    cum_rate = np.sum(rate) - np.cumsum(rate)[:-1]
+    prescale = 1
+    for i in np.arange(cum_rate.size,0,-1)-1:
+        while cum_rate[i] >= n_trig*prescale:
+            print("prescale: ", prescale, "threshold: ", i)
+            prescale *= 8
     
+
+
 if __name__ == "__main__":
     example_text = '''examples:
 
@@ -94,19 +54,48 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description='Plot rate from Cosmics.', epilog=example_text,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('files', metavar='FILE', nargs='+', help='file to process')
-    parser.add_argument('--skip_default',action="store_true", help="skip the default plot or plots.")
+    parser.add_argument('files', nargs='+', help='files to process')
     parser.add_argument('--sandbox',action="store_true", help="run sandbox code and exit (for development).")
     parser.add_argument('--max',  type=int, default=200,help="maximum pixel value in rate plot (x-axis).")
-    parser.add_argument('--inclusive',action="store_true", help="plot inclusive rate at each threshold")
-    parser.add_argument('--num',  metavar='NUM', type=int, default=10,help="find prescales and thresholds yielding NUM pixels per event.")
-    parser.add_argument('--txtdump',action="store_true", help="text dump histograms and exit before plotting.")
+    parser.add_argument('--cum',action="store_true", help="plot cumulative rate at each threshold")
+    parser.add_argument('--n_trig',  metavar='NUM', type=int, default=10,help="find prescales and thresholds yielding NUM pixels per event.")
     args = parser.parse_args()
+
+    hist_cln = 0
+    hist_hot = 0
+    hist_wgt = 0
+    images = 0
 
     for filename in args.files:
         print("processing file:  ", filename)
-        process(filename, args)
+        
+        # load data:
+        header, cln, hot, wgt = unpack_all(filename)
 
+        hist_cln += cln
+        hist_hot += hot
+        hist_wgt += wgt
 
+        tot_images = interpret_header(header, "images")
+        prescale   = interpret_header(header, 'hist_prescale')
 
+        images += tot_images / prescale
+
+    images = int(images)
+
+    ax = plt.gca()
+    hist_raw = hist_cln + hist_hot
+    plot(hist_raw, norm=images, cum=args.cum, ax=ax, color="black", label='Raw')
+    plot(hist_cln, norm=images, cum=args.cum, ax=ax, color='blue', label='Clean')
+    plot(hist_wgt, norm=images, cum=args.cum, ax=ax, color='green', label='Calib')
+    
+    plt.xlabel("pixel value")
+    plt.semilogy()
+    plt.xlim(0,args.max)
+
+    plt.legend()
+    plt.show()
+
+    if args.cum:
+        calibrate_thresholds(hist_wgt/images, args.n_trig)
 

@@ -5,7 +5,6 @@ from unpack import *
 from matplotlib.colors import LogNorm
 from geometry import load_res
 from dark_pixels import load_dark
-from hot_pixels import load_hot
 import matplotlib.pyplot as plt
 import argparse
 import sys
@@ -63,6 +62,7 @@ def calculate(calib, rsq_thresh=0, calib_dark=True, calib_hot=True, ds=4):
             print("dark pixel file could not be processed")
      
     if calib_hot:
+        from hot_pixels import load_hot
         try:
             print('loading hot pixels')
             hot = load_hot(calib)
