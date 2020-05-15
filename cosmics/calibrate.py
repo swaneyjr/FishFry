@@ -5,7 +5,9 @@ import sys
 from unpack_trigger import interpret_header
 
 # temporary hack to add pixelstats modules to path
-sys.path.insert(0, '/home/jswaney/FishFry/pixelstats')
+fishfry_dir = os.path.dirname(os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(fishfry_dir, 'pixelstats'))
+
 from lens_shading import load_weights
 from hot_pixels import load_hot
 from geometry import load_res
