@@ -1,0 +1,7 @@
+active False
+debug False
+update_period 600
+heartbeat_period 10
+heartbeat_pin 32
+serial_port /dev/ttyACM0
+baud_rate 115200

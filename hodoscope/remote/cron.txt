@@ -1,0 +1,2 @@
+* * * * * $HOME/hodoscope/logserial.py --config $HOME/hodoscope/config.txt --logs $HOME/hodoscope/logs/
+0 * * * * rsync -a $HOME/hodoscope/logs fishstand-data@craydata.ps.uci.edu:/data/hodoscope/
