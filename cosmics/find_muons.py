@@ -54,14 +54,14 @@ def save_trig(fname, t, x, y, raw, cal):
     vraw = r.vector('UInt_t')()
     vcal = r.vector('UInt_t')()
 
-    trigs.Branch('t', vt, 't/D')
+    trigs.Branch('t', t0, 't/D')
     trigs.Branch('x', vx)
     trigs.Branch('y', vy)
     trigs.Branch('raw', vraw)
     trigs.Branch('cal', vcal)
 
     for i in np.argsort(t):
-        if t[i] > t0:
+        if t[i] > t0[0]:
             trigs.Fill()
             vx.clear()
             vy.clear()
@@ -72,7 +72,7 @@ def save_trig(fname, t, x, y, raw, cal):
         vx.push_back(int(x[i]))
         vy.push_back(int(y[i]))
         vraw.push_back(int(raw[i]))
-        vcal.push_back(int(trig[i]))
+        vcal.push_back(int(cal[i]))
 
     trigs.Fill()
 
@@ -138,7 +138,7 @@ if __name__ == "__main__":
     
     print()
 
-    print("rate:            ", rate)
+    print("frame rate:      ", rate, "Hz")
     print("minimum time:    ", np.min(time))
     print("maximum time:    ", np.max(time))
     print("start date:      ", datetime.fromtimestamp(np.min(time)))

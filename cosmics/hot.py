@@ -3,6 +3,7 @@
 # dump a header from run data
 
 import sys
+import os
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
@@ -38,6 +39,7 @@ if __name__ == "__main__":
     parser.add_argument('--sandbox',action="store_true", help="run trial code")
     parser.add_argument('--thresh',  type=int,help="calibrated threshold for occupancy count")
     parser.add_argument('--calib', default='calib',help='location of calibration directory')
+    parser.add_argument('--maxocc', default=1, type=int, help='maximum number of hits for "clean" pixel')
     parser.add_argument('--plot', action='store_true', help='plot pixel occupancies')
     parser.add_argument('--commit',action="store_true", help="save hot pixels to file.")
     parser.add_argument('--verbose', action="store_true", help="display file summary")
@@ -52,7 +54,10 @@ if __name__ == "__main__":
     end = "\n" if args.verbose else "\r"
     for filename in args.files:
         print("processing file:  ", filename, end=end)
-        idx_occ = process(filename, calibrator, args.thresh, verbose=False)
+        idx_occ = process(filename, 
+                calibrator, 
+                args.thresh, 
+                verbose=False)
         occ[idx_occ] += 1
        
     print("max occupancy:  ", np.max(occ))
@@ -61,7 +66,7 @@ if __name__ == "__main__":
     print("hot pixels:     ", np.sum(occ > 1))
 
     
-    hot = np.argwhere(occ > 1).flatten()
+    hot = np.argwhere(occ > args.maxocc).flatten()
     
     if args.plot:
         plt.hist(occ, bins=np.arange(occ.max()+1), log=True)
@@ -70,5 +75,5 @@ if __name__ == "__main__":
 
     if args.commit:
         print("saving ", hot.size, " hot pixels to file.")
-        np.savez("calib/hot_offline.npz", hot_list=hot)
+        np.savez(os.path.join(args.calib, 'hot_offline.npz'), hot_list=hot)
 
