@@ -1,2 +1,2 @@
 * * * * * $HOME/hodoscope/logserial.sh
-0 * * * * rsync -a $HOME/hodoscope/logs fishstand-data@craydata.ps.uci.edu:/data/hodoscope/
+#0 * * * * rsync -a $HOME/hodoscope/logs/ fishstand-data@craydata.ps.uci.edu:/data/hodoscope/
