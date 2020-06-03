@@ -1,20 +1,18 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-import sys
 import numpy as np
-import matplotlib.pyplot as plt
 
 import argparse
 
-def process(filename, args):
+def process(filename, center):
     try:
         npz = np.load(filename)
     except:
-        print "could not process file ", filename, " as .npz file."
+        print("could not process file ", filename, " as .npz file.")
         return
     
-    for x in npz.iterkeys():
-        print x
+    #for x in npz.iterkeys():
+    #    print(x)
     
     a = npz['chan_a']
     b = npz['chan_b']
@@ -25,20 +23,29 @@ def process(filename, args):
     ca  = np.intersect1d(c,a)
     abc = np.intersect1d(ab,c)
 
-    print "a:   ", a.size
-    print "b:   ", b.size
-    print "c:   ", c.size
-    print "ab:   ", ab.size
-    print "bc:   ", bc.size
-    print "ca:   ", ca.size
-    print "abc:  ", abc.size
+    print("a:   ", a.size)
+    print("b:   ", b.size)
+    print("c:   ", c.size)
+    print("ab:  ", ab.size)
+    print("bc:  ", bc.size)
+    print("ca:  ", ca.size)
+    print("abc: ", abc.size)
+    print()
 
-    print "efficiency is:  ", float(abc.size) / float(ab.size)
+    if center == 'a':
+        denom = bc.size
+    elif center == 'b':
+        denom = ac.size
+    elif center == 'c':
+        denom = ab.size
 
-    print "min time:  ", np.min(a)
-    print "max time:  ", np.max(a)
+    eff = abc.size / denom
+    eff_err = np.sqrt(eff * (1-eff) / denom)
 
+    print("eff = ", eff, "+/-", eff_err)
 
+    print("min time:  ", np.min(a))
+    print("max time:  ", np.max(a))
 
     
 if __name__ == "__main__":
@@ -49,13 +56,23 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Calibrate Arduino times from heartbeat data.', epilog=example_text,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('files', metavar='FILE', nargs='+', help='file to process')
-    parser.add_argument('--sandbox',action="store_true", help="run sandbox code and exit (for development).")
     parser.add_argument('--out',help="output filename")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('-a', action='store_true')
+    group.add_argument('-b', action='store_true')
+    group.add_argument('-c', action='store_true')
     args = parser.parse_args()
 
+    if args.a:
+        center = 'a'
+    elif args.b:
+        center = 'b'
+    elif args.c:
+        center = 'c'
+
     for filename in args.files:
-        print "processing file:  ", filename
-        process(filename, args)
+        print("processing file:  ", filename)
+        process(filename, center)
 
 
 
