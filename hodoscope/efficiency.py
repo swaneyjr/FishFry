@@ -35,7 +35,7 @@ def process(filename, center):
     if center == 'a':
         denom = bc.size
     elif center == 'b':
-        denom = ac.size
+        denom = ca.size
     elif center == 'c':
         denom = ab.size
 

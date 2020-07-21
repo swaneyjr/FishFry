@@ -34,10 +34,7 @@ def process(filename,args):
     global chan_a, chan_b, chan_c
     global hits
 
-    if (min_time != None):
-        acquire = False
-    else:
-        acquire = True
+    acquire = not (min_time != None)
 
     a_ard = np.array([], dtype=int)
     b_ard = np.array([], dtype=int)
@@ -63,8 +60,6 @@ def process(filename,args):
 
     rpi_heartbeat = 0
     ard_heartbeat = 0
-    
-    print(f.readline()),
 
     epoch = datetime.datetime.utcfromtimestamp(-7*60*60)  # correction for PST
   
@@ -108,7 +103,13 @@ def process(filename,args):
             break
 
         # must be a PMT time:
-        x = int(line)
+        try:
+            x = int(line)
+        except:
+            # possibly a warning
+            print('IRREGULAR:', line, end='')
+            continue
+
         hits = np.append(hits, x)
 
         if (hits.size == count):
@@ -169,13 +170,13 @@ def process(filename,args):
     chan_b = np.append(chan_b, np.interp(b_ard, h_ard, h_rpi))
     chan_c = np.append(chan_c, np.interp(c_ard, h_ard, h_rpi))
 
-    if not np.all(chan_a[:-1] < chan_a[1:]):
+    if not np.all(chan_a[:-1] <= chan_a[1:]):
         print("ERROR:  calibrated times are not monotonically increasing for channel a..")
         return
-    if not np.all(chan_b[:-1] < chan_b[1:]):
+    if not np.all(chan_b[:-1] <= chan_b[1:]):
         print("ERROR:  calibrated times are not monotonically increasing for channel b..")
         return
-    if not np.all(chan_c[:-1] < chan_c[1:]):
+    if not np.all(chan_c[:-1] <= chan_c[1:]):
         print("ERROR:  calibrated times are not monotonically increasing for channel c..")
         return
 
