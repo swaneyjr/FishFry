@@ -67,46 +67,47 @@ def process(filename,args):
     while(1):
         line = f.readline()
         if not line: break
-        match = heartbeat_re.match(line)
-        if (match != None):            
-            date_str = match.group(1)
-            # e.g. 2018-09-14 21:38:50.005481
-            date = datetime.datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S.%f')
-            if (max_time != None):
-                if (date >= max_time):
-                    break
-            if (not acquire):
-                if (date > min_time):
-                    acquire = True
-                else:
-                    continue
-            #print date_str, "-->", date
-            delta = date - epoch
-            h = delta.total_seconds()
-            rpi_heartbeat += 1
-            h_rpi = np.append(h_rpi, h)
-            continue
-
-        if (not acquire):
-            continue
-
-        match = update_re.match(line)
-        if (match != None):
-            update = np.array(match.group(1,2,3,4),dtype="int")            
-            count = np.sum(update)
-            ard_heartbeat += update[3]
-            hits = np.empty(0)
-            continue
-
-        match = end_re.match(line)
-        if (match != None):
-            break
-
-        # must be a PMT time:
+        
         try:
+            match = heartbeat_re.match(line)
+            if (match != None):            
+                date_str = match.group(1)
+                # e.g. 2018-09-14 21:38:50.005481
+                date = datetime.datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S.%f')
+                if (max_time != None):
+                    if (date >= max_time):
+                        break
+                if (not acquire):
+                    if (date > min_time):
+                        acquire = True
+                    else:
+                        continue
+                #print date_str, "-->", date
+                delta = date - epoch
+                h = delta.total_seconds()
+                rpi_heartbeat += 1
+                h_rpi = np.append(h_rpi, h)
+                continue
+
+            if (not acquire):
+                continue
+
+            match = update_re.match(line)
+            if (match != None):
+                update = np.array(match.group(1,2,3,4),dtype="int")            
+                count = np.sum(update)
+                ard_heartbeat += update[3]
+                hits = np.empty(0)
+                continue
+
+            match = end_re.match(line)
+            if (match != None):
+                break
+
+            # must be a PMT time or a corrupted line
             x = int(line)
+        
         except:
-            # possibly a warning
             print('IRREGULAR:', line, end='')
             continue
 
