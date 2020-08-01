@@ -145,7 +145,7 @@ class LogMasterDaemon(threading.Thread):
             if self.cfg.update():
                 if not self.cfg.active: break
                 self.logserial_daemon.is_restarting = True
-                self.heartbeat_daemon.is_restarting = True 
+                self.heartbeat_daemon.interval = self.cfg.heartbeat_period
 
             sleep(self.cfg.update_period)
 
@@ -190,8 +190,6 @@ class LogSerialDaemon(threading.Thread):
 
     def run(self):
 
-        self.is_restarting = False
-
         # open the serial connection (this starts the arduino)
         ser = Serial(self.cfg.serial_port, self.cfg.baud_rate, timeout=None)
         sleep(3)
@@ -203,6 +201,7 @@ class LogSerialDaemon(threading.Thread):
         sys.stdout.flush()
 
         while True:
+            self.is_restarting = False
             while not self.is_restarting:
                 synclog(ser.readline().decode('utf-8').strip())
                 sys.stdout.flush()
@@ -212,7 +211,7 @@ class LogSerialDaemon(threading.Thread):
                     return
 
             # updated config file
-            if ser.serial_port != self.cfg.serial_port or ser.baud_rate != self.cfg.baud_rate:
+            if ser.port != self.cfg.serial_port or ser.baudrate != self.cfg.baud_rate:
                 # serial port settings have changed, so reconnect
                 ser.close()
                 self.run()
@@ -236,12 +235,10 @@ class HeartbeatDaemon(MultiTimer):
                 kwargs={'self': self}) 
         self.cfg = config
         self.stopped = True
-        self.is_restarting = False
         
     def start(self):
         if not self.stopped: return
         self.stopped = False
-        self.is_restarting = False
 
         GPIO.setmode(GPIO.BOARD)
         GPIO.setup(self.cfg.heartbeat_pin, GPIO.OUT)
@@ -259,10 +256,6 @@ class HeartbeatDaemon(MultiTimer):
 
         if not self.cfg.active: 
             self.stop()
-
-        elif self.is_restarting:
-            self.stop()
-            self.start()
 
     def stop(self):
         super().stop()
