@@ -1,8 +1,8 @@
-active False
+active True
 thresh_a 65
 thresh_b 65
 thresh_c 65
-update_period 300
+update_period 60
 heartbeat_period 10
 heartbeat_pin 32
 serial_port /dev/ttyACM0

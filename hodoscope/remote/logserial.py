@@ -19,23 +19,32 @@ except RuntimeError:
 
 # custom process name for easier lookup
 PROC_TITLE = 'logseriald' 
+LOCK = threading.Lock()
 
+def synclog(*message):
+    with LOCK:
+        print(*message)
+    
 
 # auxiliary class for parsing config files
 class LogConfig():
 
     DEFAULT_CFG = {
             'active': False,
-            'debug': False,
+            'thresh_a': 255,
+            'thresh_b': 255,
+            'thresh_c': 255,
             'update_period': 600,
             'heartbeat_period': 10,
             'heartbeat_pin': 32,
             'serial_port': "/dev/ttyACM0",
-            'baud_rate': 115200,
+            'baud_rate': 115200, 
             }
     CONFIG_TYPES = {
             'active': bool,
-            'debug': bool,
+            'thresh_a': int,
+            'thresh_b': int,
+            'thresh_c': int,
             'update_period': int,
             'heartbeat_period': int,
             'heartbeat_pin': int,
@@ -63,7 +72,7 @@ class LogConfig():
                     try:
                         v = LogConfig.CONFIG_TYPES[k](v.strip())
                     except:
-                        print('Could not parse line', l)
+                        synclog('Could not parse line', l)
                         pass
 
                 cfg[k] = v
@@ -96,7 +105,7 @@ class LogConfig():
 class LogMasterDaemon(threading.Thread):
 
     def __init__(self, config, logdir):
-        super().__init__(daemon=True)
+        super().__init__(daemon=False)
         self.cfg = config
         self.logdir = logdir
         
@@ -105,7 +114,7 @@ class LogMasterDaemon(threading.Thread):
 
     def run(self): 
 
-        if self.cfg.debug:
+        if self.logdir is None:
             print("running in foreground.")
         else:
             now = datetime.now()
@@ -126,7 +135,7 @@ class LogMasterDaemon(threading.Thread):
             log = open(os.path.join(self.logdir, logfile), 'w')
             sys.stdout = log
             sys.stderr = log
-            print("new log started at", now)
+            synclog("new log started at", now)
 
         self.logserial_daemon.start()
         self.heartbeat_daemon.start()
@@ -155,11 +164,11 @@ class LogMasterDaemon(threading.Thread):
             count += 1
 
         if ls_alive:
-            print('Timed out waiting for LogSerialDaemon')
+            synclog('Timed out waiting for LogSerialDaemon')
         if hb_alive:
-            print('Timed out waiting for HeartbeatDaemon')
+            synclog('Timed out waiting for HeartbeatDaemon')
 
-        print('Master thread terminating')
+        synclog('Master thread terminating')
 
 
     @staticmethod
@@ -177,25 +186,47 @@ class LogSerialDaemon(threading.Thread):
  
     def __init__(self, config):
         super().__init__(daemon=True)
-        self.cfg = config
+        self.cfg = config 
 
     def run(self):
 
         self.is_restarting = False
 
-        # open the serial connection
+        # open the serial connection (this starts the arduino)
         ser = Serial(self.cfg.serial_port, self.cfg.baud_rate, timeout=None)
-        print(ser.readline().decode('utf-8').strip())
-   
+        sleep(3)
+
+        synclog(ser.readline().decode('utf-8').strip()) 
+        
+        self.post_thresholds(ser)
+
         sys.stdout.flush()
-  
-        while self.cfg.active and not self.is_restarting:
-            print(ser.readline().decode('utf-8').strip())
-            sys.stdout.flush()
 
-        if self.is_restarting:
-            self.run()
+        while True:
+            while not self.is_restarting:
+                synclog(ser.readline().decode('utf-8').strip())
+                sys.stdout.flush()
 
+                if not self.cfg.active: 
+                    ser.close()
+                    return
+
+            # updated config file
+            if ser.serial_port != self.cfg.serial_port or ser.baud_rate != self.cfg.baud_rate:
+                # serial port settings have changed, so reconnect
+                ser.close()
+                self.run()
+
+            else:
+                self.post_thresholds(ser)
+
+
+    def post_thresholds(self, ser):
+        s = 'A: {}\n'.format(self.cfg.thresh_a) \
+          + 'B: {}\n'.format(self.cfg.thresh_b) \
+          + 'C: {}\n'.format(self.cfg.thresh_c)
+        ser.write(s.encode('utf-8'))
+        ser.flushInput()
 
 
 class HeartbeatDaemon(MultiTimer):
@@ -221,7 +252,7 @@ class HeartbeatDaemon(MultiTimer):
     def heartbeat(self):
         
         GPIO.output(self.cfg.heartbeat_pin, GPIO.LOW)
-        print("heartbeat:", datetime.now())
+        synclog("heartbeat:", datetime.now())
         sleep(0.01)
         GPIO.output(self.cfg.heartbeat_pin, GPIO.HIGH) 
         sys.stdout.flush()
@@ -252,7 +283,8 @@ if __name__ == "__main__":
 
     parser = ArgumentParser('Write arduino triggers to logs')
     parser.add_argument('--config', required=True, help='path to config file')
-    parser.add_argument('--log', required=True, help='directory to store log files')
+    parser.add_argument('--log', help='directory to store log files')
+    parser.add_argument('--debug', action='store_true', help='run in foreground')
 
     args = parser.parse_args() 
 
@@ -260,8 +292,9 @@ if __name__ == "__main__":
     if not cfg.active:
         exit(0)
 
-    print("starting new logging thread.") 
-    t = LogMasterDaemon(cfg, args.log)
+    print("starting new logging thread.")
+    log = None if args.debug else args.log
+    t = LogMasterDaemon(cfg, log)
     t.start()
 
 
