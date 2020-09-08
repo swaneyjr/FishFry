@@ -1,98 +1,171 @@
 #!/usr/bin/env python3
 
-import numpy as np
-import random
-from scipy.optimize import brentq
-
 import os
 import sys
-sys.path.insert(1, '../pixelstats')
-from geometry import load_res
+import itertools as it
+
+import numpy as np
+import matplotlib.pyplot as plt
 
 # in Hz*mm^-2
-muon_flux = 1/(60*100)
+HORIZ_MUON_FLUX = .0067
 
+LYSO_X = 14.
+LYSO_Y = 16.
+LYSO_Z = 6.
+
+PIX_XY = 1.12e-3
 
 # generates a cos^2 distribution of theta values in [0,2*pi)
 def random_theta(n):
-    rand = np.random.uniform(0, np.pi / 2, n)
-    cdf = lambda theta, r: theta + np.sin(2.0 * theta) / 2 - r
-    thetas = [brentq(cdf, 0., np.pi/2.0, args=rand[i]) for i in range(n)]
-    return np.array(thetas)
+    rand = np.random.random(n)
+    return np.arccos(rand**(1/4))
 
+def monte_carlo(n, x, y, zplus, zminus, initial=0, source=(LYSO_X,LYSO_Y)):
+ 
+    x_src = source[0] / 2
+    y_src = source[1] / 2
+    
+    x0 = np.random.uniform(-x_src, x_src, n)
+    y0 = np.random.uniform(-y_src, y_src, n)
+    z0 = (zplus[initial] + zminus[initial]) / 2
 
-def monte_carlo(n, lyso_x, lyso_y, cmos_x, cmos_y, start_gap, end_gap, rot=False):
-    start_x = lyso_x
-    start_y = lyso_y
-
-    if rot:
-        end_x = lyso_y
-        end_y = lyso_x
-    else:
-        end_x = lyso_x
-        end_y = lyso_y
+    # cast to numpy arrays
+    x = np.array(x).reshape(-1,1)
+    y = np.array(y).reshape(-1,1)
+    zplus = np.array(zplus).reshape(-1,1)
+    zminus = np.array(zminus).reshape(-1,1)
 
     # geometrical acceptance of telescope
     tan_theta = np.tan(random_theta(n))
     phi = np.random.uniform(0, 2.0 * np.pi, n)
     cos_phi = np.cos(phi)
-    sin_phi = np.sin(phi) 
+    sin_phi = np.sin(phi)
 
-    # points of interest: cmos and closest ends of paddles
-    z_vals = np.array([0, start_gap, start_gap + end_gap]).reshape(-1, 1)
+    # calculate x and y coordinates at both ends of detectors
 
-    xvals = np.random.uniform(-start_x/2.0, start_x/2.0, n) \
-            + z_vals * tan_theta * cos_phi
-    yvals = np.random.uniform(-start_y/2.0, start_y/2.0, n) \
-            + z_vals * tan_theta * sin_phi
-    
-    cmos = (np.abs(xvals[1]) < cmos_x/2.0) & (np.abs(yvals[1]) < cmos_y/2.0)
-    hodo = (np.abs(xvals[2]) < end_x/2.0) & (np.abs(yvals[2]) < end_y/2.0)
+    xplus = x0 + (zplus-z0) * tan_theta * cos_phi
+    yplus = y0 + (zplus-z0) * tan_theta * sin_phi
 
+    xminus = x0 + (zminus-z0) * tan_theta * cos_phi
+    yminus = y0 + (zminus-z0) * tan_theta * sin_phi
 
-    hodo_acceptance = hodo.sum() / n
-    p_cmos_given_hodo = (hodo & cmos).sum() / hodo.sum()
+    # parametrize the track as
+    # x(t) = xminus + t * (xplus - xminus)
+    # y(t) = yminus + t * (yplus - yminus)
+    # 0 <= t <= 1
 
-    return hodo_acceptance, p_cmos_given_hodo
+    t_xlo = (-x/2 - xminus) / (xplus - xminus)
+    t_xhi = (x/2 - xminus) / (xplus - xminus)
+    t_ylo = (-y/2 - yminus) / (yplus - yminus)
+    t_yhi = (y/2 - yminus) / (yplus - yminus)
+
+    # now see if these intervals intersect with the volume
+    tx = np.sort([t_xlo, t_xhi], axis=0)
+    ty = np.sort([t_ylo, t_yhi], axis=0)
+
+    t0 = np.maximum(tx[0], ty[0])
+    t1 = np.minimum(tx[1], ty[1])
+
+    return (t0 <= t1) & (t0 <= 1) & (t1 >= 0)
 
 
 if __name__ == '__main__':
     from argparse import ArgumentParser
-    parser = ArgumentParser(description='Find relevant geometrical acceptance factors')
-    parser.add_argument('--calib', default='calib', help='calibration directory')
-    parser.add_argument('--lyso_dims', required=True, nargs=2, type=float, help='"x y" in mm, separated by spaces')
-    parser.add_argument('--gap', required=True, type=float, nargs="+", help='Separation between CMOS and LYSO crystals in mm.  Either a single argument for both or two arguments for top and bottom.')
-    parser.add_argument('--rot', action='store_true', help='The bottom scintillator is rotated 90 degrees about the z axis with respect to the top and the CMOS')
-    parser.add_argument('--pix_size', type=float, default='1.1', help='Side length of a pixel in um')
-    parser.add_argument('--n', type=int, default=10000, help='Number of particles to sample')
+    parser = ArgumentParser(description='Find relevant geometrical acceptance factors') 
+    parser.add_argument('--phone_z', type=float, default=None, help='Location of CMOS (if present) on z axis in mm')
+    parser.add_argument('--lyso_z', required=True, type=float, nargs='+', help='Location of LYSO centers on z axis in mm')
+    parser.add_argument('--n', type=int, default=1000000, help='Number of particles to sample')
     parser.add_argument('--eff', type=float, default=1., help='Efficiency of each scintillator/PMT')
-    parser.add_argument('--uncertainty', dest='sigma', type=float, default=.2, help='Uncertainty in mm of all length measurements')
+    parser.add_argument('--uncertainty', dest='sigma', type=float, default=.1, help='Uncertainty in mm of all length measurements')
+    parser.add_argument('--calib', help='calibration directory')
 
     args = parser.parse_args()
 
-    lyso_dims = np.array(args.lyso_dims)
-    cmos_size = args.pix_size/1000 * np.array(load_res(args.calib))
+    x = []
+    y = []
+    zplus = []
+    zminus = []
+    
+    for z in args.lyso_z:
+        x.append(LYSO_X)
+        y.append(LYSO_Y)
+        zplus.append(z + LYSO_Z / 2)
+        zminus.append(z - LYSO_Z / 2)
 
-    if len(args.gap) == 1:
-        gaps = np.array([args.gap, args.gap])
-    else:
-        gaps = np.array([args.gap])
+    if not args.phone_z is None:
+        sys.path.insert(1, '../pixelstats')
+        from geometry import load_res
 
-    hodo_acceptance, p_pgh = monte_carlo(args.n, *lyso_dims, *cmos_size, gaps[0], gaps[1], args.rot)
+        cmos_size = PIX_XY * np.array(load_res(args.calib)) 
+        x.append(cmos_size[0])
+        y.append(cmos_size[1])
+        zplus.append(args.phone_z)
+        zminus.append(args.phone_z)
 
-    # very rough estimate of uncertainty
-    _, p_pgh_plus = monte_carlo(args.n, *(lyso_dims-args.sigma), *cmos_size, *(gaps+args.sigma),args.rot)
-    _, p_pgh_minus = monte_carlo(args.n, *(lyso_dims+args.sigma), *cmos_size, *(gaps-args.sigma),args.rot)
+    # first do hodoscope acceptances
+    
+    # make the flux wider than the initial detector
+    border = LYSO_Z * np.tan(75*np.pi/180)
+    lyso_idx = list(range(len(args.lyso_z)))
 
-    p_pgh_err = np.abs(p_pgh_plus - p_pgh_minus) / 4
+    for i in lyso_idx:
+        sx = LYSO_X + 2*border
+        sy = LYSO_Y + 2*border
 
-    p_hgp = args.eff**2 * p_pgh * hodo_acceptance * np.product(lyso_dims) / np.product(cmos_size)
-    p_hgp_err = p_hgp * hodo_acceptance * (p_pgh_err / p_pgh)
+        hits = monte_carlo(args.n, x, y, zplus, zminus, i, source=(sx, sy))
+        hits_initial = hits.sum(axis=1)[i]
 
-    np.savez(os.path.join(args.calib, 'geometry.npz'), 
+        t_elapsed = args.n / HORIZ_MUON_FLUX / (sx * sy)
+        hodo_rate = hits.sum(axis=1)[i] / t_elapsed
+    
+        print()
+        print('LYSO {}'.format(i+1))
+        print('Simulated elapsed time:  ', int(t_elapsed), 'min')
+        print('Rate of incidence:       ', '{:.5f}'.format(hodo_rate), '/ min')
+       
+        # loop over all other lyso combinations
+        lyso_other = lyso_idx.copy()
+        lyso_other.remove(i)
+
+        for s in it.chain.from_iterable(it.combinations(lyso_other, r) for r in range(1, len(lyso_idx))):
+            
+            hs = hits[list(s) + [i]]
+            p = np.logical_and.reduce(hs).sum() / hits_initial
+
+            s_fmt = map(lambda x: str(x+1), s)
+            print('P({} | {}) = {:.5f}'.format(' & '.join(s_fmt), i+1, p))
+
+    # now handle the phone
+    
+    if args.phone_z:
+
+        print('PHONE')
+        hits = monte_carlo(args.n, x, y, zplus, zminus, -1, source=cmos_size)
+        hits_initial = hits.sum(axis=1)[-1]
+
+        t_elapsed = args.n / HORIZ_MUON_FLUX / np.product(cmos_size)
+        hodo_rate = hits.sum(axis=1)[-1] / t_elapsed
+
+        print('Simulated elapsed time:  ', int(t_elapsed), 'min')
+        print('Rate of incidence:       ', '{:.5f}'.format(hodo_rate), '/ min')
+
+        for s in it.chain.from_iterable(it.combinations(lyso_idx, r) for r in range(1, len(lyso_idx)+1)):
+
+            hs = hits[list(s)]
+            p = np.logical_and.reduce(hs).sum() / hits_initial
+
+            s_fmt = map(lambda x: str(x+1), s)
+            print('P({} | {}) = {:.5f}'.format(' & '.join(s_fmt), 'PHONE', p))
+
+ 
+    if args.calib:
+
+        #TODO
+        np.savez(os.path.join(args.calib, 'geometry.npz'), 
             p_pgh = p_pgh,
-            p_pgh_err = p_pgh_err, 
+            p_pgh_err = 0, 
             p_hgp = p_hgp,
-            p_hgp_err = p_hgp_err,
+            p_hgp_err = 0,
             rate = args.eff**2 * hodo_acceptance * muon_flux * np.product(lyso_dims))
 

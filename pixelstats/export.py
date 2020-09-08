@@ -105,10 +105,16 @@ def export_wgt(infile, outfile):
 
 def import_hot(infile, outfile):
 
-    with open(infile) as f:
-        hot_hash = np.fromfile(f, dtype='>i4',count=1)[0]
-        n_hot = np.fromfile(f, dtype='>i4', count=1)[0]
-        hot = np.fromfile(f,dtype='>i4')
+    try:
+        f = open(infile)
+    except:
+        print(infile, 'not found')
+        return
+
+    hot_hash = np.fromfile(f, dtype='>i4',count=1)[0]
+    n_hot = np.fromfile(f, dtype='>i4', count=1)[0]
+    hot = np.fromfile(f,dtype='>i4')
+    f.close()
 
     if hot.size != n_hot: 
         print('Invalid data in', infile)
@@ -136,13 +142,18 @@ def import_hot(infile, outfile):
 def import_wgt(infile, outfile):
     
     # load .cal file
-    with open(infile) as f:
-        wgt_hash = np.fromfile(f, dtype='>i4', count=1)[0]
-        ds = np.fromfile(f, dtype='>i4', count=1)[0]
-        lx = np.fromfile(f, dtype='>i4', count=1)[0]
-        ly = np.fromfile(f, dtype='>i4', count=1)[0]
-        wgt = np.fromfile(f, dtype='>f4')
+    try:
+        f = open(infile)
+    except:
+        print(infile, 'not found')
+        return
 
+    wgt_hash = np.fromfile(f, dtype='>i4', count=1)[0]
+    ds = np.fromfile(f, dtype='>i4', count=1)[0]
+    lx = np.fromfile(f, dtype='>i4', count=1)[0]
+    ly = np.fromfile(f, dtype='>i4', count=1)[0]
+    wgt = np.fromfile(f, dtype='>f4')
+    f.close()
 
     if wgt.size != lx*ly: 
         print('Invalid data in', infile)

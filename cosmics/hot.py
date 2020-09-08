@@ -37,7 +37,7 @@ if __name__ == "__main__":
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('files', metavar='FILE', nargs='+', help='file to process')
     parser.add_argument('--sandbox',action="store_true", help="run trial code")
-    parser.add_argument('--thresh',  type=int,help="calibrated threshold for occupancy count")
+    parser.add_argument('--thresh',  type=int, default=1, help="calibrated threshold for occupancy count")
     parser.add_argument('--calib', default='calib',help='location of calibration directory')
     parser.add_argument('--maxocc', default=1, type=int, help='maximum number of hits for "clean" pixel')
     parser.add_argument('--plot', action='store_true', help='plot pixel occupancies')
@@ -58,18 +58,21 @@ if __name__ == "__main__":
                 calibrator, 
                 args.thresh, 
                 verbose=False)
-        occ[idx_occ] += 1
+        occ += np.histogram(idx_occ, bins=np.arange(total_pixels+1))[0]
        
     print("max occupancy:  ", np.max(occ))
     print("total hits:     ", np.sum(occ))
     print("single hits:    ", np.sum(occ == 1))
-    print("hot pixels:     ", np.sum(occ > 1))
+    print("hot pixels:     ", np.sum(occ > args.maxocc))
 
     
     hot = np.argwhere(occ > args.maxocc).flatten()
     
     if args.plot:
-        plt.hist(occ, bins=np.arange(occ.max()+1), log=True)
+        if occ.max() > 200:
+            plt.hist(occ, bins=200, log=True)
+        else:
+            plt.hist(occ, bins=np.arange(occ.max()+1), log=True)
         plt.title('Pixel occupancy')
         plt.show()
 
