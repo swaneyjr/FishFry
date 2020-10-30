@@ -13,8 +13,8 @@ from hot_pixels import load_hot
 from geometry import load_res
 
 class Calibrator:
-    def __init__(self, calib_dir, denom=1023):
-        self.denom=1023
+    def __init__(self, calib_dir, offline=False, denom=1023):
+        self.denom=denom
  
         try:
             wgt = load_weights(calib_dir) 
@@ -27,8 +27,8 @@ class Calibrator:
             print('Could not load lens-shading map')
 
         try:
-            hot = load_hot(calib_dir)
-         
+            hot = load_hot(calib_dir, offline=offline)
+
             hot_x = hot %  self.width
             hot_y = hot // self.width
 

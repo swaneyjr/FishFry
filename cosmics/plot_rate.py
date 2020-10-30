@@ -72,9 +72,9 @@ if __name__ == "__main__":
         # load data:
         header, cln, hot, wgt = unpack_all(filename)
 
-        hist_cln += cln
-        hist_hot += hot
-        hist_wgt += wgt
+        hist_cln += cln.astype(float)
+        hist_hot += hot.astype(float)
+        hist_wgt += wgt.astype(float)
 
         tot_images = interpret_header(header, "images")
         prescale   = interpret_header(header, 'hist_prescale')

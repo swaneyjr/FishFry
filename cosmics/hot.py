@@ -12,7 +12,7 @@ from unpack_trigger import unpack_all, show_header, interpret_header
 from calibrate import Calibrator 
 
 
-def process(filename, calibrator, thresh=None, verbose=False):
+def process(filename, calibrator, thresh=0, verbose=False):
     header,px,py,highest,region,timestamp,millistamp,images,dropped = unpack_all(filename)
     if verbose:
         show_header(header)
@@ -21,9 +21,10 @@ def process(filename, calibrator, thresh=None, verbose=False):
     icenter = region.shape[1] // 2
 
     # if thresh is set, use it to count occupancies
-    # otherwise, use the the highese prescale
-    idx_regions = region[:, icenter] > thresh if thresh \
-            else (highest == highest.max())
+    # otherwise, use the the highest prescale
+    idx_regions = (highest == highest.max())
+    if thresh: 
+        idx_regions &= (region[:, icenter] > thresh)
 
     # return flattened indices with hits
     return py[idx_regions]*calibrator.width + px[idx_regions]
@@ -40,13 +41,14 @@ if __name__ == "__main__":
     parser.add_argument('--thresh',  type=int, default=1, help="calibrated threshold for occupancy count")
     parser.add_argument('--calib', default='calib',help='location of calibration directory')
     parser.add_argument('--maxocc', default=1, type=int, help='maximum number of hits for "clean" pixel')
-    parser.add_argument('--plot', action='store_true', help='plot pixel occupancies')
-    parser.add_argument('--commit',action="store_true", help="save hot pixels to file.")
-    parser.add_argument('--verbose', action="store_true", help="display file summary")
+    parser.add_argument('-p', '--plot', action='store_true', help='plot pixel occupancies')
+    parser.add_argument('-c', '--commit',action="store_true", help="save hot pixels to file.")
+    parser.add_argument('-o', '--offline', action='store_true', help='include offline hotcels')
+    parser.add_argument('-v', '--verbose', action="store_true", help="display file summary")
 
     args = parser.parse_args()
 
-    calibrator = Calibrator(args.calib)
+    calibrator = Calibrator(args.calib, offline=args.offline)
     total_pixels = calibrator.width * calibrator.height
     print('total pixels:', total_pixels)
     occ = np.zeros(total_pixels)
@@ -69,10 +71,12 @@ if __name__ == "__main__":
     hot = np.argwhere(occ > args.maxocc).flatten()
     
     if args.plot:
-        if occ.max() > 200:
-            plt.hist(occ, bins=200, log=True)
-        else:
+        if args.maxocc > 1:
+            plt.hist(occ, bins=np.arange(args.maxocc+1), log=True)
+        elif occ.max() <= 200: 
             plt.hist(occ, bins=np.arange(occ.max()+1), log=True)
+        else:
+            plt.hist(occ, bins=200, log=True)
         plt.title('Pixel occupancy')
         plt.show()
 
