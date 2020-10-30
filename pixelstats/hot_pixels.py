@@ -16,12 +16,12 @@ def load_hot(calib_dir, offline=False):
 
     if offline:
         try:
-            f_offline = os.path.join(calib_dir, 'hot_offline.npz')
+            f_offline = np.load(os.path.join(calib_dir, 'hot_offline.npz'))
             off = f_offline['hot_list']
             hot = np.unique(np.hstack([hot, off]))
             f_offline.close()
         except IOError:
-            pass
+            print('No offline hot pixels to load')
 
     return hot
 

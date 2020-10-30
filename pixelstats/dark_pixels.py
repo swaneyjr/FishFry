@@ -39,7 +39,11 @@ def find_dark(px, py, thresh=None, calib='calib', commit=False):
     width, height = load_res(calib)
     fgain = np.load(os.path.join(calib, 'gain.npz'))
     gain = fgain.f.gain.reshape(height, width)
+    rsq = fgain.f.rsq.reshape(height,width)
     fgain.close()
+
+    # clean outliers
+    gain[gain < 0] = np.nan
 
     # crop to fit the dark pixel period
     crop_x = (width // px - 2) * px

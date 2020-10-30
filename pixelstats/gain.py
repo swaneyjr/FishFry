@@ -57,13 +57,16 @@ def process(filename, args):
  
 # Best-fit line, assuming constant fractional uncertainty in the y value.
 # --> uses a weighted regression TBDetermined
-def fit_line(x, y, xmax=np.inf, ymax=np.inf):
+def fit_line(x, y, xrange=(0,np.inf), yrange=(0,np.inf)):
     print('\nfitting line, divide by zero will occur')
     print('size of x: ', x.size)
     print('size of y: ', y.size)
+
+    xmin, xmax = xrange
+    ymin, ymax = yrange
    
     # weighted regression for calculating gain and intercept
-    valid = (x < xmax) & (y < ymax)
+    valid = (x >= xmin) & (x < xmax) & (y >= ymin) & (y < ymax)
     count = np.sum(valid, axis=0)
     
     w = np.ones(y.shape)
@@ -102,15 +105,17 @@ def plot_array(statistic, title, cmap='viridis', log=False):
     global WIDTH, HEIGHT
 
     sort_stat = np.sort(statistic)
-    idx = statistic.size // 100
+    idx = statistic.size // 10
 
     vmin = sort_stat[idx]
     vmax = sort_stat[-idx]
 
-    norm = LogNorm() if log else None
+    if log:
+        norm = LogNorm(vmin=vmin, vmax=vmax)
+        plt.imshow(statistic.reshape(HEIGHT, WIDTH), cmap=cmap, norm=norm)
+    else:
+        plt.imshow(statistic.reshape(HEIGHT, WIDTH), cmap=cmap, vmin=vmin, vmax=vmax)
 
-    plt.imshow(statistic.reshape(HEIGHT, WIDTH), 
-            cmap=cmap, vmin=vmin, vmax=vmax, norm=norm)
     plt.title(title)
     plt.xlabel('x')
     plt.ylabel('y')
@@ -251,7 +256,7 @@ if __name__ == "__main__":
     parser.add_argument('files', metavar='FILE', nargs='+', help='file to process')
     parser.add_argument('--calib', default='calib', help="calibration directory to save files")
     parser.add_argument('--pixel_range',type=int,nargs=2, metavar=("MIN","MAX"),help="Only evalulate pixels with MIN <= index < MAX", default=[0,0])
-    parser.add_argument('--mean_max',type=float,metavar="X",help="maximum mean to include in fitting",default=850)
+    parser.add_argument('--mean_range',type=float,nargs=2, metavar=('XMIN', 'XMAX'), help="minimum and maximum mean to include in fitting", default=(0,850))
     
     parser.add_argument('--commit', action='store_true', help='commit to .npz files in calibration directory')
     parser.add_argument('-s', '--spatial_plots', action="store_true", help="make spatial plots for gain, black level, R^2, and number of sample points")
@@ -271,7 +276,7 @@ if __name__ == "__main__":
     mean = np.vstack(MEANS)
     variance = np.vstack(VARIANCES)
 
-    gain, intercept, rsq, count = fit_line(mean, variance, xmax=args.mean_max)
+    gain, intercept, rsq, count = fit_line(mean, variance, xrange=args.mean_range)
     black_level = -intercept / gain
     print('fitted gain complete.')
 

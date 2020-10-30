@@ -34,7 +34,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     for filename in args.files:
-        print "processing file:  ", filename
+        print("processing file:  ", filename)
         process(filename, args)
 
         

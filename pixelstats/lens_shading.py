@@ -100,6 +100,7 @@ def load(calib):
 
 def plot(lens, min_gain=None, max_gain=None):
     print('plotting computed lens')
+    plt.title('Inverse weights before normalization')
     plt.imshow(lens, vmin=min_gain, vmax=max_gain)
     plt.colorbar()
     #plt.savefig("plots/lens.pdf")
@@ -123,7 +124,7 @@ if __name__ == "__main__":
     parser.add_argument('--max_gain',  type=float, help="minimum gain for plot.")
     parser.add_argument('--min_gain',  type=float, help="maximum gain for plot.")
     parser.add_argument('--plot_only',action="store_true", help="load and plot previous results.")
-
+    parser.add_argument('--black', type=float, default=0, help='Record black level value')
     parser.add_argument('--commit', action="store_true", help="commit lens.npz file")
     parser.add_argument('--plot', action="store_true", help="plot lens shading values")
 
@@ -143,11 +144,12 @@ if __name__ == "__main__":
         if args.commit:
             filename = os.path.join(args.calib, 'lens.npz')
             print('computed lens shading committed to ', filename)
-            np.savez(filename, down_sample=args.down_sample, lens=lens)
+            np.savez(filename, 
+                    down_sample=args.down_sample, 
+                    lens=lens,
+                    blk_lvl = args.black)
 
         if args.plot: 
             plot(lens, args.min_gain, args.max_gain)
-
-
 
 
