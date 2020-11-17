@@ -6,6 +6,21 @@ import ROOT as r
 import numpy as np
 import matplotlib.pyplot as plt
 
+# temporary hack to add pixelstats modules to path
+fishfry_dir = os.path.dirname(os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(fishfry_dir, 'pixelstats'))
+from geometry import load_res
+from lens_shading import load_weights
+from electrons import load_electrons
+
+
+COUNTS = {
+        'max': 1,
+        'sum5': 5,
+        'sum9': 9,
+        'sum21': 21,
+        }
+
 if __name__ == '__main__':
     from argparse import ArgumentParser
     parser = ArgumentParser(description='')
@@ -14,6 +29,8 @@ if __name__ == '__main__':
     parser.add_argument('--thresh', type=int, default=0, help='Additional threshold')
     parser.add_argument('--log', action='store_true', help='Display a logscale for y')
     parser.add_argument('--bin_sz', type=int, default=16, help='Bin width for plots')
+    parser.add_argument('--stat', choices=list(COUNTS.keys()), default='max', help='Statistic to measure')
+    parser.add_argument('--sat', type=int, default=1023)
     args = parser.parse_args() 
      
     # first load calibration data
@@ -21,15 +38,15 @@ if __name__ == '__main__':
         f_acc = np.load(os.path.join(args.calib, 'acceptance.npz'))
         
         # P(hodoscope | phone)
-        p_hgp = f_acc['p_hgp']
-        p_hgp_err = f_acc['p_hgp_err']
+        p_hgp = f_acc['p_hgp_AB']
+        p_hgp_err = f_acc['p_hgp_err_AB']
         
         # P(phone | hodoscope)
-        p_pgh = f_acc['p_pgh']
-        p_pgh_err = f_acc['p_pgh_err']
+        p_pgh = f_acc['p_pgh_AB']
+        p_pgh_err = f_acc['p_pgh_err_AB']
 
         # in Hz
-        expected_rate = f_acc['rate']
+        expected_rate = f_acc['hodo_rate_AB']
 
         f_acc.close()
     except:
@@ -40,31 +57,26 @@ if __name__ == '__main__':
     gmin = 0
     blk_lvl = 0
     try:
-        f_wgt = np.load(os.path.join(args.calib, 'lens.npz'))
-        lens = f_wgt['lens']
-        wgt = np.where(lens > 0, 1/lens, 0)
-        wgt /= wgt.max()
+        wgt = load_weights(args.calib)
         sat_min = int(sat_min * wgt.min())
-
-        gmin = lens.min()
-
-        if 'blk_lvl' in f_wgt.files:
-            blk_lvl = f_wgt['blk_lvl']
-
-        f_wgt.close()
-
     except FileNotFoundError:
         print('Weights not found.  Using equal weights.')
 
+    try:
+        gmin, blk_lvl, dark_noise = load_electrons(args.calib)
+    except FileNotFoundError:
+        print('Could not find gain data.  Run pixelstats/electrons.py first')
+
+    sat_min = min(args.sat, sat_min*COUNTS[args.stat])
 
     # now look through ROOT files
 
     # in order to avoid artificial caps, we restrict the range
     # to the minimum weighted saturation value
     
-    bins = np.arange(0, 1025, args.bin_sz)
+    bins = np.arange(0, 1025*COUNTS[args.stat], args.bin_sz)
     bin_min_all = 0
-    bin_max_all = (sat_min//args.bin_sz) + 2
+    bin_max_all = (sat_min+1)//args.bin_sz + 1
     cdf_vals = []
     cdf_errs = []
 
@@ -75,88 +87,72 @@ if __name__ == '__main__':
 
         pfile = r.TFile(pf)
         ptree = pfile.Get('triggers')
-    
-        bnames = [b.GetName() for b in ptree.GetListOfBranches()]
-        if not 'tag' in bnames:
-            print("ERROR: use mark_triggered.py first")
-            exit(1)
+        ntree = pfile.Get('nontriggers')
+        btree = pfile.Get('blocks_AB')
 
-        uinfo = ptree.GetUserInfo()
+        uinfo = btree.GetUserInfo()
         tolerance = n_hodo = t_tot = t_frame = None
 
         for param in uinfo:
             if param.GetName() == 'tolerance':
-                tolerance = param.GetVal()
+                tolerance =  param.GetVal()
             if param.GetName() == 'n_hodo':
                 n_hodo = param.GetVal()
             if param.GetName() == 't_tot':
                 t_tot = param.GetVal()
-            if param.GetName() == 't_frame':
-                t_frame = param.GetVal()
 
         if not tolerance or not n_hodo or not t_tot:
             print("ERROR: Metadata not found")
             exit(1)
         
-        vmin = 1024 # this could probably just be saved from thresholds  
+        vmin = args.sat # this could probably just be saved from thresholds  
 
         # find ratio of triggered / total
         for evt in ptree:
-            cmax = max(evt.cal)
+            cmax = getattr(evt, args.stat)
             vmin = min(vmin, cmax)
             if cmax > args.thresh:
-                tot.append(cmax)
-                if evt.tag:
-                    tag.append(cmax)
+                tot.append(min(cmax, args.sat))
+                if evt.tag_AB:
+                    tag.append(min(cmax, args.sat))
         
         print("Triggered: {} / {}".format(len(tag), len(tot)))
 
-        hodo_rate = (n_hodo - 1) / t_tot * 1e3 # in Hz
-        hodo_rate_err = np.sqrt(n_hodo - 1) / t_tot * 1e3
+        hodo_rate = n_hodo / t_tot * 1e3 # in Hz
+        hodo_rate_err = np.sqrt(n_hodo) / t_tot * 1e3
+        hodo_factor = np.exp(hodo_rate * 1e-3 * tolerance)
         
         print(u'observed rate: {:.3f} \u00B1 {:.3f} mHz'.format(hodo_rate * 1e3, hodo_rate_err * 1e3))
         print('expected rate: {:.3f} mHz'.format(expected_rate * 1e3))
  
-        tag_hist, bins = np.histogram(tag, bins)
-        tot_hist, bins = np.histogram(tot, bins)
-
-        tag_hist_cum = np.cumsum(tag_hist[::-1]).astype(float)[::-1]
-        tot_hist_cum = np.cumsum(tot_hist[::-1]).astype(float)[::-1]
+        tag_hist, _ = np.histogram(tag, bins)
+        tot_hist, _ = np.histogram(tot, bins)
+ 
+        n  = np.cumsum(tot_hist[::-1]).astype(float)[::-1]
+        nt = np.cumsum(tag_hist[::-1]).astype(float)[::-1]
+        nnt = n - nt
 
         # use poisson statistics to estimate total number of hits
         # from triggered frames
 
-        # P(frame occupied) = 1-e^-(lambda*t)
-        n_frames = t_tot / t_frame + 1
+        ntot = ptree.GetEntries() + ntree.GetEntries()
+        nnttot = ntot - ntree.GetEntries('tag') - ntree.GetEntries('tag')
         
-        p_tot = tot_hist_cum / n_frames
-        tot_hist_corr = -np.log(1-p_tot) * n_frames
-        #tot_hist_err = np.sqrt(tot_hist_cum)/(1-p_tot) 
+        N = -ntot * np.log(1-n/ntot)
+        Nnt = -nnttot * np.log(1-nnt/nnttot)
 
-        untagged = n_frames - tag_hist_cum
-        tag_hist_corr = tot_hist_corr + untagged * np.log(1 - (tot_hist_cum - tag_hist_cum) / untagged)
-        untag_hist_corr = tot_hist_corr - tag_hist_corr
+        print('max trig rate: {:.2f}'.format(n[0] / ntot))
 
-        print('Max trig rate: {:.2f}'.format(tot_hist_corr[0] / n_frames))
+        # calculate and plot signal-to-noise ratio 
 
-
-
-        # calculate and plot signal-to-noise ratio
-
-        hodo_factor = np.exp(tolerance * hodo_rate * 1e-3) 
-
-        cdf = (tag_hist_corr * hodo_factor - tot_hist_corr * (hodo_factor - 1)) / n_hodo / p_pgh
-        cdf_var = (cdf * p_pgh_err / p_pgh)**2 \
-                + (tot_hist_corr - untag_hist_corr * (1 - tolerance*hodo_rate*1e-3) * hodo_factor)**2 / p_pgh**2 / n_hodo**3 \
-                + (p_pgh * n_hodo)**-2 * (tag_hist_corr + untag_hist_corr*(hodo_factor-1)**2)
+        cdf = (N - Nnt*hodo_factor) / n_hodo / p_pgh
+        cdf_var = 0.01 * cdf**2 # FIXME
 
         cdf_vals.append(cdf)
-        cdf_errs.append(np.sqrt(cdf_var)) 
+        cdf_errs.append(np.sqrt(cdf_var))
 
-        frac = cdf * n_hodo / tot_hist_corr
-        frac_var = (frac * p_pgh_err / p_pgh)**2 \
-                + ((tot_hist_corr - tag_hist_corr) * hodo_factor / tag_hist_corr / p_pgh * hodo_rate * tolerance * 1e-3)**2 / n_hodo \
-                + ((hodo_factor-1) / p_pgh)**2 * (untag_hist_corr / tag_hist_corr**2 + untag_hist_corr**2 / untag_hist_corr**3)
+        frac = cdf * n_hodo / N
+        frac_var = 0.01 * frac**2
 
         snr = (1/frac-1)**-1
         snr_err = np.sqrt(frac_var)/(1-frac)**2
@@ -167,10 +163,9 @@ if __name__ == '__main__':
 
         plt.figure(figsize=(6.4, 5.6)) 
         ax = plt.gca()
-        ax.plot(bins[bin_min+1:bin_max_all+1], snr[bin_min:bin_max_all], 'r-')
-        ax.fill_between(bins[bin_min+1:bin_max_all+1], (snr-snr_err)[bin_min:bin_max_all], (snr+snr_err)[bin_min:bin_max_all], color='red', alpha=0.2)
+        ax.plot(bins[:-1][bin_min:bin_max_all], snr[bin_min:bin_max_all], 'r-')
+        ax.fill_between(bins[:-1][bin_min:bin_max_all], (snr-snr_err)[bin_min:bin_max_all], (snr+snr_err)[bin_min:bin_max_all], color='red', alpha=0.2)
 
-        #ax.errorbar(bins[bin_min+1:bin_max_all+1], snr[bin_min:bin_max_all], yerr=snr_err[bin_min:bin_max_all], fmt='ro')
         if args.log:
             ax.semilogy()
         ax.set_xlabel('Calibrated ADC counts')
@@ -179,7 +174,7 @@ if __name__ == '__main__':
         
         if gmin:
             ax2 = ax.twiny()
-            ax2.set_xlim(*((np.array(ax.get_xlim()) - blk_lvl) / gmin))
+            ax2.set_xlim(*((np.array(ax.get_xlim()) - blk_lvl*COUNTS[args.stat]) / gmin))
             ax2.set_xlabel('Electrons')
             ax2.xaxis.set_ticks_position('bottom')
             ax2.xaxis.set_label_position('bottom')
@@ -199,8 +194,8 @@ if __name__ == '__main__':
   
     plt.figure(figsize=(6.4, 5.6))
     ax = plt.gca()
-    ax.plot(bins[bin_min+1:bin_max_all+1], cdf_combined[bin_min:bin_max_all], 'b-')
-    ax.fill_between(bins[bin_min+1:bin_max_all+1], (cdf_combined-cdf_err_combined)[bin_min:bin_max_all], (cdf_combined+cdf_err_combined)[bin_min:bin_max_all], alpha=0.2)
+    ax.plot(bins[:-1][bin_min:bin_max_all], cdf_combined[bin_min:bin_max_all], 'b-')
+    ax.fill_between(bins[:-1][bin_min:bin_max_all], (cdf_combined-cdf_err_combined)[bin_min:bin_max_all], (cdf_combined+cdf_err_combined)[bin_min:bin_max_all], alpha=0.2)
     if args.log:
         ax.semilogy()
     ax.set_xlabel('Calibrated ADC counts')
