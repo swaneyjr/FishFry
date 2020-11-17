@@ -1,30 +1,34 @@
 #!/usr/bin/env python3
 
-
-from unpack import *
-from matplotlib.colors import LogNorm
-from geometry import load_res
-from dark_pixels import load_dark
-import matplotlib.pyplot as plt
 import argparse
 import sys
 import os
 
+import numpy as np
+from scipy import optimize
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
+
+from unpack import *
+from geometry import load_res
+from dark_pixels import load_dark
+
+
 def load_weights(calib):
     f_lens = np.load(os.path.join(calib, 'lens.npz'))
     
-    gain = f_lens['lens']
+    wgt  = f_lens['wgt']
     ds   = f_lens['down_sample']
 
     f_lens.close()
 
-    wgt = np.where(gain > 0, 1/gain, 0)
-    wgt /= wgt.max()
+    wgt[np.isnan(wgt) | np.isinf(wgt) | (wgt < 0)] = 0
+    wgt_all = np.repeat(np.repeat(wgt, ds, axis=0), ds, axis=1)
+        
+    return wgt_all
 
-    return np.repeat(np.repeat(wgt, ds, axis=0), ds, axis=1)
-    
 
-def calculate(calib, rsq_thresh=0, calib_dark=True, calib_hot=True, ds=4):
+def downsample(calib, rsq_thresh=0, calib_dark=True, calib_hot=True, ds=4):
 
     print('loading image geometry')
     width, height = load_res(calib)
@@ -49,15 +53,18 @@ def calculate(calib, rsq_thresh=0, calib_dark=True, calib_hot=True, ds=4):
     # set bad pixels to NaN
     infs = np.isinf(gain) | np.isinf(intercept) | np.isnan(intercept)
     gain[infs] = np.nan
+    intercept[infs] = np.nan
 
     if rsq_thresh:
         gain[rsq < rsq_thresh] = np.nan
+        intercept[rsq < rsq_thresh] = np.nan
 
     if calib_dark:
         try:
             print('loading dark pixels')
             dark = load_dark(calib)
             gain[dark] = np.nan
+            intercept[dark] = np.nan
         except IOError:
             print("dark pixel file could not be processed")
      
@@ -67,6 +74,7 @@ def calculate(calib, rsq_thresh=0, calib_dark=True, calib_hot=True, ds=4):
             print('loading hot pixels')
             hot = load_hot(calib)
             gain[hot] = np.nan
+            intercept[hot] = np.nan
         except IOError:
             print("hot pixel file could not be processed") 
 
@@ -77,19 +85,52 @@ def calculate(calib, rsq_thresh=0, calib_dark=True, calib_hot=True, ds=4):
 
     # take mean of each n x n block
     gain_ds = gain.reshape(ny, ds, nx, ds)
-    g_means = np.nanmedian(gain_ds, axis=(1,3))
+    intercept_ds = intercept.reshape(ny, ds, nx, ds)
+    g_av = np.nanmedian(gain_ds, axis=(1,3))
+    b_av = np.nanmedian(intercept_ds, axis=(1,3))
     
     print('downsampling completed, displaying information:')
     print('nx:                ', nx)
     print('ny:                ', ny)
-    print('lens.size:         ', g_means.size)
-    print('lens.shape:        ', g_means.shape)
-    print('NaN found:         ', np.sum(np.isnan(g_means)))
+    print('lens.shape:        ', g_av.shape)
+    print('NaN found:         ', np.sum(np.isnan(g_av)))
     print()
     
     print('computed lens shading attributes')
 
-    return g_means
+    return g_av, b_av
+
+def radial_correct(stat, n_points=20, plot=False):
+    sy, sx = stat.shape
+    
+    X, Y = np.meshgrid(np.arange(sx), np.arange(sy))
+    R = np.sqrt((X-X.mean())**2 + (Y-Y.mean())**2) 
+
+    fit_x = np.linspace(0, R.max(), n_points) 
+
+    # use a piecewise linear fit
+    def make_segment(xi, xf, yi, yf):
+        def _(x):
+            return yi + (x - xi)/(xf-xi)*(yf-yi)
+        return _
+
+    def f(x, *y):
+        funclist = [make_segment(*xy) for xy in zip(fit_x[:-1], fit_x[1:], y[:-1], y[1:])]
+        return np.piecewise(x, [x >= xi for xi in fit_x[:-1]], funclist)
+
+    p0 = [2 + i**2/100 for i in range(n_points)]
+    y, _ = optimize.curve_fit(f, R.flatten(), stat.flatten(), p0)
+    fit_y = f(fit_x, *y)
+
+    if plot:
+        plt.figure()
+        plt.plot(fit_x, fit_y, 'y-')
+        plt.hist2d(R.flatten(), stat.flatten(), bins=(500,500), norm=LogNorm(), cmap='Purples')
+        plt.title('Radial gain fit')
+        plt.xlabel('Radius (pix)')
+        plt.ylabel('Gain')
+
+    return np.interp(R, fit_x, fit_y).reshape(sy, sx)
 
 
 def load(calib):    
@@ -100,7 +141,8 @@ def load(calib):
 
 def plot(lens, min_gain=None, max_gain=None):
     print('plotting computed lens')
-    plt.title('Inverse weights before normalization')
+    plt.figure()
+    plt.title('Smoothed gain')
     plt.imshow(lens, vmin=min_gain, vmax=max_gain)
     plt.colorbar()
     #plt.savefig("plots/lens.pdf")
@@ -124,7 +166,7 @@ if __name__ == "__main__":
     parser.add_argument('--max_gain',  type=float, help="minimum gain for plot.")
     parser.add_argument('--min_gain',  type=float, help="maximum gain for plot.")
     parser.add_argument('--plot_only',action="store_true", help="load and plot previous results.")
-    parser.add_argument('--black', type=float, default=0, help='Record black level value')
+    parser.add_argument('--radial', action='store_true', help='Use radially symmetric weights')
     parser.add_argument('--commit', action="store_true", help="commit lens.npz file")
     parser.add_argument('--plot', action="store_true", help="plot lens shading values")
 
@@ -135,19 +177,22 @@ if __name__ == "__main__":
         plot(lens, args.min_gain, args.max_gain)
         
     else: 
-        lens=calculate(args.calib, 
+        lens, offset = downsample(args.calib, 
                 calib_dark=(not args.keep_dark), 
-                calib_hot=(not args.keep_hot),
-                rsq_thresh = args.min_rsq,
+                calib_hot=(not args.keep_hot), 
+                rsq_thresh = args.min_rsq, 
                 ds=args.down_sample)
+  
+        if args.radial:
+            lens = radial_correct(lens, plot=args.plot) 
 
         if args.commit:
+            
             filename = os.path.join(args.calib, 'lens.npz')
             print('computed lens shading committed to ', filename)
             np.savez(filename, 
                     down_sample=args.down_sample, 
-                    lens=lens,
-                    blk_lvl = args.black)
+                    wgt=lens.min()/lens)
 
         if args.plot: 
             plot(lens, args.min_gain, args.max_gain)

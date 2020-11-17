@@ -66,29 +66,23 @@ def fit_line(x, y, xrange=(0,np.inf), yrange=(0,np.inf)):
     ymin, ymax = yrange
    
     # weighted regression for calculating gain and intercept
-    valid = (x >= xmin) & (x < xmax) & (y >= ymin) & (y < ymax)
-    count = np.sum(valid, axis=0)
-    
-    w = np.ones(y.shape)
-    w[np.logical_not(valid)] = np.nan
+    w = ((x >= xmin) & (x < xmax) & (y >= ymin) & (y < ymax)).astype(bool)
 
     xw = x*w
     yw = y*w
 
-    del valid
-
-    ex     = np.nanmean(xw, axis=0)
-    ey     = np.nanmean(yw, axis=0)
-    exx    = np.nanmean(xw**2, axis=0)
-    exy    = np.nanmean(xw*yw, axis=0)
-    eyy    = np.nanmean(yw**2, axis=0)
-    ew     = np.nanmean(w, axis=0)
+    sx     = np.sum(xw, axis=0)
+    sy     = np.sum(yw, axis=0)
+    sxx    = np.sum(xw**2, axis=0)
+    sxy    = np.sum(xw*yw, axis=0)
+    syy    = np.sum(yw**2, axis=0)
+    sw     = np.sum(w, axis=0)
 
     # calculate R^2 values    
-    r2 = (exy*ew - ex*ey)**2 / (exx*ew - ex**2) / (eyy*ew - ey**2)
+    r2 = (sxy*sw - sx*sy)**2 / (sxx*sw - sx**2) / (syy*sw - sy**2)
 
-    a = (exy*ew - ex*ey) / (exx*ew - ex**2)
-    b = ey - a*ex
+    a = (sxy*sw - sx*sy) / (sxx*sw - sx**2)
+    b = (sy - a*sx)/sw
      
     print('line fitted. \nall intermediate values computed:')
     print('a:       ', a)
@@ -98,7 +92,7 @@ def fit_line(x, y, xrange=(0,np.inf), yrange=(0,np.inf)):
     print('max: ', r2[np.logical_not(np.isnan(r2))].max())
     print()
     
-    return a, b, r2, count
+    return a, b, r2, sw
 
 
 def plot_array(statistic, title, cmap='viridis', log=False):
@@ -285,18 +279,19 @@ if __name__ == "__main__":
         n_figs += 1
         plt.figure(n_figs, figsize=(10,6))
         plot_array(gain, title='Gain', log=True, cmap='plasma')
-        
+         
         n_figs += 1
         plt.figure(n_figs, figsize=(10,6))
         plot_array(black_level, title='Black level', cmap='cool')
-        
+       
         n_figs += 1
         plt.figure(n_figs, figsize=(10,6))
-        plot_array(rsq, title=r'$R^2$', cmap='seismic')
-        
+        plot_array(rsq, title=r'$R^2$', cmap='seismic') 
+
         n_figs += 1
         plt.figure(n_figs, figsize=(10,6))
         plot_array(count, title='Data points', cmap='rainbow')
+        
 
     if args.pix_plots or args.plot_all:
         n_figs += 1

@@ -17,7 +17,7 @@ def process(filename, args):
     # load data, from either raw file directly from phone, or as output from combine.py utility:
 
     if args.raw:
-         version,header,sum,ssq = unpack_all(filename)
+         version,header,sum,ssq,max,second = unpack_all(filename)
          index = get_pixel_indices(header)
          images = interpret_header(header, "images")
          num = np.full(index.size, images)
@@ -51,26 +51,11 @@ def process(filename, args):
         cmean = cmean * wgt
         cvari = cvari * wgt**2
 
-    # first show spatial distribution
-    plt.figure(1, figsize=(6,8))
-
-    plt.subplot(211)
-    plt.imshow(cmean.reshape(height, width), 
-            cmap='seismic', vmax=args.max_mean)
-    plt.colorbar()
-
-    plt.subplot(212)
-    plt.imshow(cvari.reshape(height, width), #norm=LogNorm(), 
-            cmap='seismic', vmax=args.max_var)
-    plt.colorbar()
-
-    # now do 2D histogram(s) for mean and variance 
-    plt.figure(2, figsize=(10,8))
- 
     # select pixels to plot
     index = np.arange(sum.size)
     xpos = index % width
     ypos = index // width
+    rpos = np.sqrt((xpos - xpos.mean())**2 + (ypos - ypos.mean())**2)
     keep = np.ones(width*height, dtype=bool)
 
     if args.no_dark or args.all_dark:
@@ -100,57 +85,58 @@ def process(filename, args):
         np.savez(hotfile, hot_list=hot_list)
 
         keep &= (hot == False)
-         
 
-    if args.by_filter or args.by_radius:
+
+    # first show spatial distribution
+    plt.figure(1, figsize=(6,8))
+
+    if args.by_radius:
+        plt.subplot(211)
+        plt.hist2d(rpos, cmean,norm=LogNorm(),bins=[500,500],range=[[0,rpos.max()],[0,args.max_mean]], cmap='seismic')
+        plt.xlabel('radius')
+        plt.ylabel('mean')
+
+        plt.subplot(212)
+        plt.hist2d(rpos, cvari,norm=LogNorm(),bins=[500,500],range=[[0,rpos.max()],[0,args.max_var]], cmap='seismic')
+        plt.xlabel('radius')
+        plt.ylabel('variance')
+
+    else:
+        plt.subplot(211)
+        plt.imshow(cmean.reshape(height, width), 
+                cmap='seismic', vmax=args.max_mean)
+        plt.colorbar()
+
+        plt.subplot(212)
+        plt.imshow(cvari.reshape(height, width), #norm=LogNorm(), 
+                cmap='seismic', vmax=args.max_var)
+        plt.colorbar()
+
+    # now do 2D histogram(s) for mean and variance 
+    plt.figure(2, figsize=(10,8))         
+
+    if args.by_filter:
 
         # 4 subplots 
 
-        if args.by_filter:
-            posA = keep * ((xpos%2)==0) * ((ypos%2)==0)
-            posB = keep * ((xpos%2)==1) * ((ypos%2)==0)
-            posC = keep * ((xpos%2)==0) * ((ypos%2)==1)
-            posD = keep * ((xpos%2)==1) * ((ypos%2)==1)
-        else:
-            rs     = ((xpos - width/2.0)**2 + (ypos - height/2.0)**2)
-            norm   = (width/2.0)**2 + (height/2.0)**2
-            rs     = rs/norm
+        for i in range(4):
+            ix = i % 2
+            iy = i // 2
 
-            posA = keep * (rs >= 0.75)
-            posB = keep * (rs < 0.75) * (rs >= 0.5) 
-            posC = keep * (rs < 0.5) * (rs >= 0.25) 
-            posD = keep * (rs < 0.25) 
-
-
-        kwargs = {
-                'norm': LogNorm(),
-                'bins': [500, 500],
-                'range':[[0,args.max_mean],[0,args.max_var]],
-                } 
- 
-        plt.subplot(221)
-        plt.hist2d(cmean[posA],cvari[posA],**kwargs)
-        plt.xlabel("mean")
-        plt.ylabel("variance")    
-        plt.subplot(222)
-        plt.hist2d(cmean[posB],cvari[posB],**kwargs)
-        plt.xlabel("mean")
-        plt.ylabel("variance")    
-        plt.subplot(223)
-        plt.hist2d(cmean[posC],cvari[posC],**kwargs)
-        plt.xlabel("mean")
-        plt.ylabel("variance")    
-        plt.subplot(224)
-        plt.hist2d(cmean[posD],cvari[posD],**kwargs)
-        plt.xlabel("mean")
-        plt.ylabel("variance")    
-        plt.show() 
+            pos = keep * ((xpos%2)==ix) * ((ypos%2)==iy)
+        
+            plt.subplot(2,2,i+1)
+            plt.hist2d(cmean[pos],cvari[pos],norm=LogNorm(), bins=(500,500), range=((0,args.max_mean),(0, args.max_var)))
+            plt.xlabel("mean")
+            plt.ylabel("variance")    
 
     else:
         plt.hist2d(cmean,cvari,norm=LogNorm(),bins=[500,500],range=[[0,args.max_mean],[0,args.max_var]])
         plt.xlabel("mean")
         plt.ylabel("variance")
         
+
+    
 
     if args.save_plot:
         plot_name = "plots/mean_var_calib.pdf" if args.calib \
@@ -197,7 +183,7 @@ if __name__ == "__main__":
     parser.add_argument('files', metavar='FILE', nargs='+', help='file to process')
     parser.add_argument('--sandbox',action="store_true", help="run sandbox code and exit (for development).")
     parser.add_argument('--raw',action="store_true", help="input files have not been preprocessed.")
-    parser.add_argument('--max_var',  type=float, default=5000,help="variance limit for plots")
+    parser.add_argument('--max_var',  type=float, default=3000,help="variance limit for plots")
     parser.add_argument('--max_mean', type=float, default=1023,help="mean limit for plots")
     parser.add_argument('--no_dark',action="store_true", help="drop dark pixels from all plots.")
     parser.add_argument('--all_dark',action="store_true", help="drop non-dark pixels from all plots.")
