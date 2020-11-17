@@ -109,16 +109,29 @@ if __name__ == '__main__':
                 millis_interp, 
                 millis_linear)).astype(int)
         
+    # use heartbeats during active DAQ as limits
+    t0 = min(millis_rpi[ch].min() for ch in ('A','B','C'))
+    t1 = max(millis_rpi[ch].max() for ch in ('A','B','C'))
+
+    h_rpi = np.array(h_rpi) * 1000
+    ti = h_rpi[h_rpi > t0].min()
+    tf = h_rpi[h_rpi < t1].max() 
+
+    cut_a = (millis_rpi['A'] > ti) & (millis_rpi['A'] < tf)
+    cut_b = (millis_rpi['B'] > ti) & (millis_rpi['B'] < tf)
+    cut_c = (millis_rpi['C'] > ti) & (millis_rpi['C'] < tf)
 
     # now output the results
     np.savez(args.out,
-            micros_a = timestamps['A'],
-            micros_b = timestamps['B'],
-            micros_c = timestamps['C'],
-            thresh_a = thresholds['A'],
-            thresh_b = thresholds['B'],
-            thresh_c = thresholds['C'],
-            millis_a = millis_rpi['A'],
-            millis_b = millis_rpi['B'],
-            millis_c = millis_rpi['C'],
+            micros_a = np.array(timestamps['A'])[cut_a],
+            micros_b = np.array(timestamps['B'])[cut_b],
+            micros_c = np.array(timestamps['C'])[cut_c],
+            thresh_a = np.array(thresholds['A'])[cut_a],
+            thresh_b = np.array(thresholds['B'])[cut_b],
+            thresh_c = np.array(thresholds['C'])[cut_c],
+            millis_a = np.array(millis_rpi['A'])[cut_a],
+            millis_b = np.array(millis_rpi['B'])[cut_b],
+            millis_c = np.array(millis_rpi['C'])[cut_c],
+            ti = ti,
+            tf = tf,
             )

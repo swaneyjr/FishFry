@@ -126,7 +126,6 @@ def process(filename,args):
     #check for roll-over:
     if not np.all(h_ard[:-1] < h_ard[1:]):
         print("ERROR:  arduino time roll-over detected.")
-        return
 
     #unfinished updates (reported but not collected)
     unfinished = update[3]
