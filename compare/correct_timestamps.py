@@ -13,9 +13,9 @@ def adjust_times(t0, starts, slopes, offsets):
 
     # this is easier if we first put the times in order
     isorted = np.argsort(starts)
-    starts = starts[isorted]
-    slopes = slopes[isorted]
-    offsets = offsets[isorted]
+    starts = np.array(starts)[isorted]
+    slopes = np.array(slopes)[isorted]
+    offsets = np.array(offsets)[isorted]
 
     t1 = t0.CloneTree(0)
     t_adj = np.zeros(1, dtype=float)
@@ -27,8 +27,9 @@ def adjust_times(t0, starts, slopes, offsets):
     starts_zero = starts.copy()
     starts_zero[0] = 0
 
-    for evt in t0:
+    for ievt,evt in enumerate(t0):
         # find start time immediately preceding each time
+        print(ievt+1, '/', t0.GetEntries(), end='\r')
         i = np.argwhere(starts_zero <= evt.t).max() 
         t_adj[0] = evt.t * (1 - slopes[i]) - total_offsets[i]
         
@@ -58,15 +59,17 @@ def calibrate_drifts(th, tp, slope_lim, offset_lim, duration=0, tlim=10000):
     alldiffs = []
         
     # keep only relevant hodoscope hits
-    th = th[(th >= tp[0] - tlim) & (th <= tp[-1] + tlim)]
+    th = th[(th >= tp[0] - tlim - offset_max) & (th <= tp[-1] + tlim - offset_min)]
 
     for i in range(th.size):
         
         diffs = tp - th[i]
-        diffs = diffs[np.abs(diffs) < tlim]
+        diffs = diffs[np.abs(diffs - np.mean(offset_lim)) < tlim]
         alldiffs += list(diffs)
         alltimes += [th[i] - tp[0]] * diffs.size
  
+    print(len(alldiffs))
+
     alltimes = np.array(alltimes)
     alldiffs = np.array(alldiffs)
 
@@ -107,103 +110,109 @@ if __name__ == '__main__':
     parser.add_argument('--hodo', dest='hfile', help='Calibrate time drifts with a .npz file of hodoscope times')
     parser.add_argument('--thresh', type=int, default=0, help='Cut on calibrated pixel values')
     parser.add_argument('--calib', default='calib', help='Path to calibration directory')
-    parser.add_argument('--slope_lim', nargs=2, type=float, default=(-1e-5,1e-5), help='Space-separated limits (min max) for slope in ms/hr')
-    parser.add_argument('--offset_lim', nargs='+', type=float, default=(-2e3,2e3), help='Space-separated limits (min max) for offset in ms')
+    parser.add_argument('--slope_lim', nargs=2, type=float, default=(-100,100), help='Space-separated limits (min max) for slope in ms/hr')
+    parser.add_argument('--offset_lim', nargs='+', type=float, default=(-1e3,1e3), help='Space-separated limits (min max) for offset in ms')
     parser.add_argument('--duration', type=int, default=0, help='Frame duration in ms')
     
     parser.add_argument('--splits', nargs='+', type=float, default=[], help='Timestamps of drift resets')
+    parser.add_argument('--dt_lim', type=float, default=10000, help='Bounds for time differences to display in ms')
+
 
     parser.add_argument('-a', action='store_true', help='Use LYSO A for coincidences')
     parser.add_argument('-b', action='store_true', help='Use LYSO B for coincidences')
     parser.add_argument('-c', action='store_true', help='Use LYSO C for coincidences')
+
     args = parser.parse_args()
 
     pfile = r.TFile(args.pfile)
+    tn = pfile.Get('nontriggers')  
     t0 = pfile.Get('triggers')
-    fdrift = os.path.join(args.calib, 'drifts.npz')
+
 
     if not len(args.splits) + 1 == len(args.offset_lim) // 2:
         raise ValueError('Incorrect number of arguments passed to --offset_lim')
 
-    if args.hfile:
-        hodo = np.load(args.hfile)
-        a = hodo['millis_a']
-        b = hodo['millis_b']
-        c = hodo['millis_c']
+    hodo = np.load(args.hfile)
+ 
+    a = hodo['millis_a']
+    b = hodo['millis_b']
+    c = hodo['millis_c']
 
-        dt = (-1,0,1)
-  
-        if args.a and args.b and not args.c:
-            th = np.unique(np.hstack([np.intersect1d(a,b+t) for t in dt]))
-        elif args.b and args.c and not args.a:
-            th = np.unique(np.hstack([np.intersect1d(b,c+t) for t in dt]))
-        elif args.c and args.a and not args.b:
-            th = np.unique(np.hstack([np.intersect1d(c,a+t) for t in dt]))
-        else:
-            raise ValueError('Exactly two of -abc must be passed')
+    dt = (-1,0,1)
 
-        tp = np.array([trig.t for trig in t0 if max(trig.cal) > args.thresh])
+    if args.a and args.b and not args.c:
+        th = np.unique(np.hstack([np.intersect1d(a,b+t) for t in dt]))
+    elif args.b and args.c and not args.a:
+        th = np.unique(np.hstack([np.intersect1d(b,c+t) for t in dt]))
+    elif args.c and args.a and not args.b:
+        th = np.unique(np.hstack([np.intersect1d(c,a+t) for t in dt]))
+    else:
+        raise ValueError('Exactly two of -abc must be passed')
+
+    tp = np.array([trig.t for trig in t0 if max(trig.cal) > args.thresh])
+
+    plt.figure(1)
+    endpoints = [tp[0]] + list(args.splits) + [tp[-1] + 1]
+    
+    alltimes = []
+    alldiffs = []
+    starts = []
+    slopes = []
+    offsets = []
+    offset_mean = np.mean(args.offset_lim[:2])
+    
+    for tmin, tmax in zip(endpoints[:-1], endpoints[1:]):
+        tp_interval = tp[(tp >= tmin) & (tp < tmax)]
+        th_interval = th[(th >= tmin) & (th < tmax)]
+
+        slope_min = args.slope_lim[0] / 3.6e6
+        slope_max = args.slope_lim[1] / 3.6e6
+
+        offset_min = args.offset_lim[0]
+        offset_max = args.offset_lim[1]
+        args.offset_lim = args.offset_lim[2:]
+
+        times, diffs, slope, offset = calibrate_drifts(th_interval, 
+                tp_interval, 
+                slope_lim=(slope_min, slope_max), 
+                offset_lim=(offset_min, offset_max), 
+                duration=args.duration,
+                tlim=args.dt_lim)
+
+        alltimes += list(times)
+        alldiffs += list(diffs)
+        starts.append(tp_interval.min())
+        slopes.append(slope)
+        offsets.append(offset)
+    
+        t_off = tp_interval.min()
+        t = np.linspace(tmin-t_off, tmax-t_off, 25)
+        bound = args.duration / 2
 
         plt.figure(1)
-        endpoints = [tp[0]] + list(args.splits) + [tp[-1] + 1]
-        
-        alltimes = []
-        alldiffs = []
-        starts = []
-        slopes = []
-        offsets = []
-        
-        for tmin, tmax in zip(endpoints[:-1], endpoints[1:]):
-            tp_interval = tp[(tp >= tmin) & (tp < tmax)]
-            th_interval = th[(th >= tmin) & (th < tmax)]
-
-            slope_min = args.slope_lim[0] / 3.6e6
-            slope_max = args.slope_lim[1] / 3.6e6
-
-            offset_min = args.offset_lim[0]
-            offset_max = args.offset_lim[1]
-            args.offset_lim = args.offset_lim[2:]
-
-            times, diffs, slope, offset = calibrate_drifts(th_interval, 
-                    tp_interval, 
-                    slope_lim=(slope_min, slope_max), 
-                    offset_lim=(offset_min, offset_max), 
-                    duration=args.duration)
-
-            alltimes += list(times)
-            alldiffs += list(diffs)
-            starts.append(tp_interval.min())
-            slopes.append(slope)
-            offsets.append(offset)
-        
-            t_off = tp_interval.min()
-            t = np.linspace(tmin-t_off, tmax-t_off, 25)
-            bound = args.duration / 2
-
-            plt.figure(1)
-            plt.plot(t+t_off, slope*t + offset - bound, '--', color='gold')
-            plt.plot(t+t_off, slope*t + offset + bound, '--', color='gold')
-        
-        plt.scatter(alltimes, alldiffs, s=0.1)
-        plt.ylim(-10000, 10000)
-        plt.xlabel(r'$t_{hodo} - t_0$')
-        plt.ylabel(r'$t_{phone} - t_{hodo}$ (ms)')
-        plt.show()
-
-        np.savez(fdrift, starts=starts, slopes=slopes, offsets=offsets)
-
-    try:
-        drifts = np.load(fdrift)
-    except IOError:
-        print("No time drift calibration found. Use the --calibrate flag")
-        exit()
+        plt.plot(t+t_off, slope*t + offset - bound, '--', color='gold')
+        plt.plot(t+t_off, slope*t + offset + bound, '--', color='gold')
     
+    plt.scatter(alltimes, alldiffs, s=0.1)
+    plt.ylim(offset_mean - args.dt_lim, offset_mean + args.dt_lim)
+    plt.xlabel(r'$t_{hodo} - t_0$')
+    plt.ylabel(r'$t_{phone} - t_{hodo}$ (ms)')
+    plt.show()
+
     if args.out:
+        fdrift = os.path.join(args.calib, 'drifts.npz')
+        np.savez(fdrift, starts=starts, slopes=slopes, offsets=offsets)
+ 
+        print('Writing triggers')
         f = r.TFile(args.out, 'RECREATE')
-        t1 = adjust_times(t0, drifts.f.starts, drifts.f.slopes, drifts.f.offsets)
-        
+        t1 = adjust_times(t0, starts, slopes, offsets)
+
+        print('Writing non-triggers')
+        tn1 = adjust_times(tn, starts, slopes, offsets)
+
         user_info = t1.GetUserInfo()
-        user_info.Add(r.TParameter('Int_t')('t_frame', args.duration))
+        user_info.Add(r.TParameter('Int_t')('t_frame', args.duration)) 
+    
         f.Write()
         f.Close()
 
