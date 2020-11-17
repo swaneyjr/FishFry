@@ -7,12 +7,13 @@ import os
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
+import ROOT as r
 
 from unpack_trigger import unpack_all, show_header, interpret_header
 from calibrate import Calibrator 
 
 
-def process(filename, calibrator, thresh=0, verbose=False):
+def process_npz(filename, calibrator, thresh=0, verbose=False):
     header,px,py,highest,region,timestamp,millistamp,images,dropped = unpack_all(filename)
     if verbose:
         show_header(header)
@@ -27,8 +28,29 @@ def process(filename, calibrator, thresh=0, verbose=False):
         idx_regions &= (region[:, icenter] > thresh)
 
     # return flattened indices with hits
-    return py[idx_regions]*calibrator.width + px[idx_regions]
+    idx_occ = py[idx_regions]*calibrator.width + px[idx_regions]
+
+    return np.histogram(idx_occ, bins=np.arange(total_pixels+1))[0]
+
  
+def process_root(filename, calibrator, thresh=0, verbose=False):
+    f = r.TFile(filename)
+    trig = f.Get('triggers')
+
+    histogram = np.zeros(calibrator.width*calibrator.height)
+
+    for ievt, evt in enumerate(trig):
+        if verbose:
+            print(ievt+1, '/', trig.GetEntries(), end='\r')
+        for x,y,cal in zip(evt.x, evt.y, evt.cal):
+        
+            if cal > thresh:
+                idx = y * calibrator.width + x
+                if idx in calibrator.hot: continue
+                histogram[idx] += 1
+
+    return histogram
+
     
 if __name__ == "__main__":
 
@@ -56,16 +78,25 @@ if __name__ == "__main__":
     end = "\n" if args.verbose else "\r"
     for filename in args.files:
         print("processing file:  ", filename, end=end)
-        idx_occ = process(filename, 
+        if filename.endswith('.npz'):
+            occ += process_npz(filename, 
                 calibrator, 
                 args.thresh, 
-                verbose=False)
-        occ += np.histogram(idx_occ, bins=np.arange(total_pixels+1))[0]
-       
+                verbose=args.verbose)
+        elif filename.endswith('.root'):
+            occ += process_root(filename,
+                calibrator,
+                args.thresh,
+                verbose=args.verbose)
+        else:
+            print('Skipping file', filename)
+
+
     print("max occupancy:  ", np.max(occ))
     print("total hits:     ", np.sum(occ))
     print("single hits:    ", np.sum(occ == 1))
     print("hot pixels:     ", np.sum(occ > args.maxocc))
+    print("hot events:     ", np.sum(occ[occ > args.maxocc]))
 
     
     hot = np.argwhere(occ > args.maxocc).flatten()
@@ -82,5 +113,9 @@ if __name__ == "__main__":
 
     if args.commit:
         print("saving ", hot.size, " hot pixels to file.")
-        np.savez(os.path.join(args.calib, 'hot_offline.npz'), hot_list=hot)
+        fname = os.path.join(args.calib, 'hot_offline.npz')
+        if args.offline:
+            fhot = np.load(fname)
+            hot = np.hstack([hot, fhot['hot_list']])
+        np.savez(fname, hot_list=hot)
 

@@ -27,10 +27,10 @@ class Calibrator:
             print('Could not load lens-shading map')
 
         try:
-            hot = load_hot(calib_dir, offline=offline)
+            self.hot = load_hot(calib_dir, offline=offline)
 
-            hot_x = hot %  self.width
-            hot_y = hot // self.width
+            hot_x = self.hot %  self.width
+            hot_y = self.hot // self.width
 
             self.weights[hot_y, hot_x] = 0
         except IOError:
