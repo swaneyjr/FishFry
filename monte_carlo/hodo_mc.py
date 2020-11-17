@@ -5,6 +5,8 @@ import itertools as it
 import numpy as np
 import matplotlib.pyplot as plt
 
+import ROOT as r
+
 def mc(nf, hodo_rate, noise_rate, eff=1):
 
     # practically unnecessary check that enough points will be sampled
@@ -90,7 +92,7 @@ def estimate_eff(trig, hodo, nf, t_coinc=1):
             fail_MN = (1 - p_MN) / (1 - p_noise)**N
             fail_M[M] += fail_MN * n_MN
 
-            print('M: {} N: {} tot: {} p: {:.3} eff:{:.3}'.format(M, N, n_MN, p_MN, 1-fail_MN))
+            #print('M: {} N: {} tot: {} p: {:.3} eff:{:.3}'.format(M, N, n_MN, p_MN, 1-fail_MN))
 
         fail_M[M] /= n_M[M]
         one_m_eff_M = (fail_M[M])**(1/M)
@@ -112,6 +114,148 @@ def estimate_eff(trig, hodo, nf, t_coinc=1):
     var = ((1 - eff) / n_tot)**2 * (var1 + p_noise / (1-p_noise) / untagged.size * (sum([n_M[M]**(1-1/M)/M for M,v in var2.items()]))**2)
 
     return eff, np.sqrt(var)
+
+
+def estimate_eff_ROOT(trig_times, hodo, nf, t_coinc=1):
+    
+    t_blocks = r.TTree('MC', 'Independent frame blocks')
+
+    tmin = -t_coinc
+    tmax = 0
+
+    t_ = np.array([0], dtype=int)
+    M_ = np.array([0], dtype=int)
+    N_ = np.array([0], dtype=int)
+    pass_ = np.array([False], dtype=bool)
+
+    t_blocks.Branch('t', t_, 't/l')
+    t_blocks.Branch('M', M_, 'M/i')
+    t_blocks.Branch('N', N_, 'N/i')
+    t_blocks.Branch('pass', pass_, 'pass/O')
+
+    nontrig_times = np.delete(np.arange(nf), trig_times)
+
+    trig_times = list(trig_times) + [np.inf]
+    nontrig_times = list(nontrig_times) + [np.inf]
+    th = np.hstack([[-np.inf], hodo, [np.inf]])
+    
+    trig_idx = 0
+    nontrig_idx = 0
+    hodo_idx = 0 
+
+    trig_entries = len(trig_times) - 1
+    nontrig_entries = len(nontrig_times) - 1
+    hodo_entries = len(th) 
+
+    # get first event, regardless of source
+    triggered = trig_times[0] < nontrig_times[0]
+    if triggered:
+        evt = trig_times[trig_idx]
+        trig_idx += 1
+    else:
+        evt = nontrig_times[nontrig_idx]
+        nontrig_idx += 1
+
+    trig_t_next = trig_times[trig_idx]
+    nontrig_t_next = nontrig_times[nontrig_idx]
+
+    t_[0] = evt
+
+    while True: 
+
+        # first decide whether to add to existing block 
+        # or start a new one
+        if evt - th[hodo_idx] >= tmax:
+
+            t_blocks.Fill()
+            
+            t_[0] = evt
+            M_[0] = 0 
+            N_[0] = 0
+            pass_[0] = False
+
+        while evt - th[hodo_idx+1] >= tmin:
+            M_[0] += 1
+            hodo_idx += 1
+
+        # update current block
+        N_[0] += 1
+        if triggered:
+            pass_[0] = True
+
+        # load next timestamp
+        if trig_idx == trig_entries and nontrig_idx == nontrig_entries:
+            # all timestamps have been iterated through
+            t_blocks.Fill()
+            break
+
+        # check whether to draw next event from triggered
+        # or nontriggered datasets
+        triggered = trig_t_next < nontrig_t_next
+
+        if triggered:
+            evt = trig_times[trig_idx]
+            trig_idx += 1
+            trig_t_next = trig_times[trig_idx]
+        else: 
+            evt = nontrig_times[nontrig_idx]
+            nontrig_idx += 1
+            nontrig_t_next = nontrig_times[nontrig_idx]
+
+    # now analyze the toy tree
+
+    hist_MN = {}
+
+    for iblk, blk in enumerate(t_blocks):
+        cmax = getattr(blk, 'pass')
+        
+        idx_MN = (blk.M, blk.N)
+        if not idx_MN in hist_MN:
+            hist_MN[idx_MN] = np.zeros(2, dtype=int)
+        
+        hist_MN[idx_MN][cmax] += 1
+    
+
+    # now extract efficiency
+    cum_MN = {MN: np.cumsum(h[::-1])[::-1][1:] for MN, h in hist_MN.items()}
+    n_MN = {MN: hist.sum() for MN, hist in hist_MN.items()}
+    p_MN = {MN: cum_MN[MN] / n_MN[MN] for MN in cum_MN}
+    p_noise = p_MN[(0,1)]
+    n_untagged = hist_MN[(0,1)].sum()
+
+    one_m_eff = 0
+    n_tot = 0
+    cache = []
+    for MN, cum in cum_MN.items():
+        #print('({},{}): {} / {}\t\t'.format(*MN, cum[0], n_MN[MN]))
+        
+        M,N = MN
+        if M != 1: continue
+    
+        one_m_eff_MN = (1 - p_MN[MN]) / (1 - p_noise)**N
+
+        # weighted average
+        one_m_eff += n_MN[MN] * one_m_eff_MN
+        n_tot += n_MN[MN]
+
+        # save for second pass
+        cache.append((N, n_MN[MN]))
+
+    eff_tot = 1 - one_m_eff / n_tot
+
+    var1 = 0
+    var2 = 0
+
+    for N, n in cache:
+        # calculate p_MN from the full dataset to avoid instabilities
+        p = 1 - (1 - eff_tot) * (1 - p_noise)**N
+
+        var1 += p * n / (1-p)
+        var2 += n * N
+
+    var_tot = ((1 - eff_tot) / n_tot)**2 * (var1 + p_noise / (1-p_noise) / n_untagged * var2**2)
+    
+    return eff_tot[0], np.sqrt(var_tot)[0]
 
 
 def estimate_eff_old(trig, hodo, nf, t_coinc=1):
@@ -145,7 +289,7 @@ def estimate_eff_old(trig, hodo, nf, t_coinc=1):
     err = np.sqrt(hodo_err**2 + n_err**2)
 
     return eff, err
-
+    
 
 if __name__ == '__main__':
     from argparse import ArgumentParser
@@ -165,7 +309,7 @@ if __name__ == '__main__':
     for i in range(args.ns):
         print(i+1, '/', args.ns, end='\r')
         trig, hodo = mc(args.nf, args.hodo, args.noise, args.eff)
-        eff_sample, eff_err = estimate_eff(trig, hodo, args.nf, args.window)
+        eff_sample, eff_err = estimate_eff_ROOT(trig, hodo, args.nf, args.window)
         eff.append(eff_sample)
         err.append(eff_err)
 
@@ -174,7 +318,7 @@ if __name__ == '__main__':
 
     print(u'eff = {} \u00B1 {}'.format(eff_mu, eff_sigma/np.sqrt(args.ns)))
 
-    plt.figure(1, figsize=(12,5))
+    plt.figure(figsize=(12,5))
     plt.subplot(121)
     plt.hist(eff, bins=args.nbins)
     plt.title(r'Efficiency reconstruction for $\epsilon = {}$'.format(args.eff))
