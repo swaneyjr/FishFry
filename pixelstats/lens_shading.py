@@ -113,7 +113,8 @@ def radial_correct(stat, n_points=20, plot=False):
         def _(x):
             return yi + (x - xi)/(xf-xi)*(yf-yi)
         return _
-
+    
+    # piecewise linear fit
     def f(x, *y):
         funclist = [make_segment(*xy) for xy in zip(fit_x[:-1], fit_x[1:], y[:-1], y[1:])]
         return np.piecewise(x, [x >= xi for xi in fit_x[:-1]], funclist)
@@ -122,13 +123,28 @@ def radial_correct(stat, n_points=20, plot=False):
     y, _ = optimize.curve_fit(f, R.flatten(), stat.flatten(), p0)
     fit_y = f(fit_x, *y)
 
+    # naive sec^(2p) function
+    def g(x, x0, a, p):
+        return a*(1 + (x/x0)**2)**p
+
+    p1 = [1000, np.mean(stat), 0]
+    p, _ = optimize.curve_fit(g, R.flatten(), stat.flatten(), p1)
+    fit_sec = g(fit_x, *p)
+
+    print('Secant fit:')
+    print('a = {:.3f}'.format(p[1]))
+    print('p = {:.3f}'.format(p[2]/2))
+    print('z = {:.3f}'.format(p[0]))
+
     if plot:
         plt.figure()
-        plt.plot(fit_x, fit_y, 'y-')
+        plt.plot(fit_x, fit_y, 'y-', label='piecewise linear')
+        plt.plot(fit_x, fit_sec, 'r-', label='secant')
         plt.hist2d(R.flatten(), stat.flatten(), bins=(500,500), norm=LogNorm(), cmap='Purples')
         plt.title('Radial gain fit')
         plt.xlabel('Radius (pix)')
         plt.ylabel('Gain')
+        plt.legend()
 
     return np.interp(R, fit_x, fit_y).reshape(sy, sx)
 

@@ -149,7 +149,7 @@ if __name__ == '__main__':
     else:
         raise ValueError('Exactly two of -abc must be passed')
 
-    tp = np.array([trig.t for trig in t0 if max(trig.cal) > args.thresh])
+    tp = np.array([trig.t for trig in t0 if max(trig.cal) >= args.thresh])
 
     plt.figure(1)
     endpoints = [tp[0]] + list(args.splits) + [tp[-1] + 1]
@@ -195,8 +195,8 @@ if __name__ == '__main__':
     
     plt.scatter(alltimes, alldiffs, s=0.1)
     plt.ylim(offset_mean - args.dt_lim, offset_mean + args.dt_lim)
-    plt.xlabel(r'$t_{hodo} - t_0$')
-    plt.ylabel(r'$t_{phone} - t_{hodo}$ (ms)')
+    plt.xlabel(r'$t_\mathrm{hodo}$')
+    plt.ylabel(r'$t_\mathrm{phone} - t_\mathrm{hodo}$ (ms)')
     plt.show()
 
     if args.out:

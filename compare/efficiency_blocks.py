@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import sys
 
 import ROOT as r
 import numpy as np
@@ -19,6 +20,11 @@ COUNTS = {
         'sum5': 5,
         'sum9': 9,
         'sum21': 21,
+        }
+COLZ = {
+        'AB': 'r',
+        'AC': 'g',
+        'BC': 'b'
         }
 
 if __name__ == '__main__':
@@ -190,21 +196,30 @@ if __name__ == '__main__':
         var_tot = ((1 - eff_tot) / n_tot)**2 * (var1 + p_noise / (1-p_noise) / n_untagged * var2**2)
         
         eff = eff_tot / p_pgh
-        eff_err = eff*np.sqrt(var_tot / eff_tot**2 + p_pgh_err**2 / p_pgh**2) 
+        random_err = np.sqrt(var_tot) / p_pgh
+        tot_err = eff*np.sqrt(var_tot / eff_tot**2 + p_pgh_err**2 / p_pgh**2) 
          
         #snr = (1/frac-1)**-1
         #snr_err = np.sqrt(frac_var)/(1-frac)**2
 
-        vmin = max(vmin, args.thresh+1)
+        vmin = max(vmin, args.thresh)
         bin_min = (vmin + args.bin_sz - 1) // args.bin_sz - 1
         bin_min_all = max(bin_min, bin_min_all)
 
         print(u'eA  = {0:.4f} \u00B1 {1:.4f}'.format(eff_tot[bin_min], np.sqrt(var_tot)[bin_min]))
-        print(u'eff = {0:.4f} \u00B1 {1:.4f}'.format(eff[bin_min], eff_err[bin_min]))
+        print(u'eff = {0:.4f} \u00B1 {1:.4f}'.format(eff[bin_min], tot_err[bin_min]))
         print()
 
-        ax1.plot(bins[:-1][bin_min:bin_max_all], eff[bin_min:bin_max_all], '-', label=c)
-        ax1.fill_between(bins[:-1][bin_min:bin_max_all], (eff-eff_err)[bin_min:bin_max_all], (eff+eff_err)[bin_min:bin_max_all], alpha=0.2)
+        ax1.plot(bins[:-1][bin_min:bin_max_all], eff[bin_min:bin_max_all], '-',
+                linewidth=1, label=c, color=COLZ[c])
+        ax1.fill_between(bins[:-1][bin_min:bin_max_all], 
+                (eff-random_err)[bin_min:bin_max_all], 
+                (eff+random_err)[bin_min:bin_max_all], 
+                alpha=0.15, color=COLZ[c], edgecolor=None)
+        ax1.fill_between(bins[:-1][bin_min:bin_max_all], 
+                (eff-tot_err)[bin_min:bin_max_all], 
+                (eff+tot_err)[bin_min:bin_max_all], 
+                alpha=0.15, color=COLZ[c], edgecolor=None)
 
         #ax2.plot(bins[:-1][bin_min:bin_max_all], snr[bin_min:bin_max_all], '-', label=c)
         #ax2.fill_between(bins[:-1][bin_min:bin_max_all], (snr-snr_err)[bin_min:bin_max_all], (snr+snr_err)[bin_min:bin_max_all], alpha=0.2)

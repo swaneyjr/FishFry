@@ -67,7 +67,7 @@ def estimate_eff(trig, hodo, nf, t_coinc=1):
     one_m_eff = 0 
     
     n_vals = np.unique(n_frames)
-    m_vals = [3] #np.unique(n_hodo)
+    m_vals = [1] #np.unique(n_hodo)
 
     cache = []
     n_M = {}
@@ -82,7 +82,7 @@ def estimate_eff(trig, hodo, nf, t_coinc=1):
             cut_MN = (n_hodo == M) & (n_frames == N)
             n_MN = cut_MN.sum()
 
-            if not n_MN: continue
+            if n_MN == 0: continue
             n_M[M] += n_MN
 
             # save for second pass
@@ -309,7 +309,7 @@ if __name__ == '__main__':
     for i in range(args.ns):
         print(i+1, '/', args.ns, end='\r')
         trig, hodo = mc(args.nf, args.hodo, args.noise, args.eff)
-        eff_sample, eff_err = estimate_eff_ROOT(trig, hodo, args.nf, args.window)
+        eff_sample, eff_err = estimate_eff(trig, hodo, args.nf, args.window)
         eff.append(eff_sample)
         err.append(eff_err)
 
@@ -318,7 +318,7 @@ if __name__ == '__main__':
 
     print(u'eff = {} \u00B1 {}'.format(eff_mu, eff_sigma/np.sqrt(args.ns)))
 
-    plt.figure(figsize=(12,5))
+    plt.figure(figsize=(7,3))
     plt.subplot(121)
     plt.hist(eff, bins=args.nbins)
     plt.title(r'Efficiency reconstruction for $\epsilon = {}$'.format(args.eff))
@@ -337,5 +337,6 @@ if __name__ == '__main__':
     plt.xlabel('Standard error')
     plt.ylabel('Frequency')
     plt.legend()
+    plt.tight_layout()
     plt.show()
 

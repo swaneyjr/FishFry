@@ -32,7 +32,7 @@ kernel21 = np.array([[0,1,1,1,0],
                      [0,1,1,1,0]])
 
 
-def process(filename, calibrator, thresh=0, verbose=False):
+def process(filename, calibrator, thresh=0, tmin=0, tmax=np.inf, verbose=False):
 
     header,px,py,highest,raw_region,timestamp,millistamp,images,dropped = unpack_all(filename)
 
@@ -40,8 +40,11 @@ def process(filename, calibrator, thresh=0, verbose=False):
     icenter = raw_region.shape[1]//2
    
     threshold,prescale = get_trigger(header)
-    keep = (highest==prescale.size) & (cal_region[:,icenter] > thresh)
-    
+
+    tlim_cut = (millistamp > tmin) & (millistamp < tmax)
+    thresh_cut = (highest==prescale.size) & (cal_region[:,icenter] >= thresh)
+    keep = tlim_cut & thresh_cut
+
     if verbose:
         print("found ", np.sum(hot), " hot regions.")
         print("found ", np.sum(np.logical_not(hot)), " non-hot regions.") 
@@ -56,7 +59,7 @@ def process(filename, calibrator, thresh=0, verbose=False):
     sum9 = (kernel9.flatten() * cal_region[keep]).sum(axis=1)
     sum21 = (kernel21.flatten() * cal_region[keep]).sum(axis=1)
 
-    t_all = np.unique(millistamp)
+    t_all = np.unique(millistamp[tlim_cut])
     t0 = t_all[np.logical_not(np.isin(t_all, t))]
 
     return t, x, y, raw, cal, sum5, sum9, sum21, t0
@@ -136,10 +139,12 @@ if __name__ == "__main__":
     parser.add_argument('trig', metavar='TRIG', nargs='+', help='trigger file(s) to process')
     parser.add_argument('--sandbox',action="store_true", help="run sandbox code and exit (for development).")
     parser.add_argument('--calib', default='calib', help="compare calibrated pixel values.")
+    parser.add_argument('--tmin', type=float, default=0, help="minimum timestamp to save")
+    parser.add_argument('--tmax', type=float, default=np.inf, help="maximum timestamp to save")
     parser.add_argument('--max',  type=int, default=50,help="maximum pixel value in rate plot (x-axis).")
     parser.add_argument('--plot', action='store_true',help='plot histogram of triggered values')
     parser.add_argument('--out', help='name of output ROOT file')
-    parser.add_argument('--thresh', type=int, default=0, help='only save values above threshold')
+    parser.add_argument('--thresh', type=int, default=0, help='only save values at or above threshold')
     parser.add_argument('--no_hotcell', action='store_true', help='trigger without offline hotcell cleaning')
     parser.add_argument('-v', '--verbose', action='store_true', help='enable verbose output')
     args = parser.parse_args() 
@@ -166,6 +171,8 @@ if __name__ == "__main__":
         t, x, y, raw, cal, sum5, sum9, sum21, t0 = process(filename, 
                 calibrator,
                 thresh=args.thresh, 
+                tmin=args.tmin,
+                tmax=args.tmax,
                 verbose=args.verbose)
 
         all_t     += list(t)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import sys
 
 import ROOT as r
 import numpy as np
@@ -111,7 +112,7 @@ if __name__ == '__main__':
         for evt in ptree:
             cmax = getattr(evt, args.stat)
             vmin = min(vmin, cmax)
-            if cmax > args.thresh:
+            if cmax >= args.thresh:
                 tot.append(min(cmax, args.sat))
                 if evt.tag_AB:
                     tag.append(min(cmax, args.sat))

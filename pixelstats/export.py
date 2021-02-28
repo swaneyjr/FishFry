@@ -27,7 +27,7 @@ def export_hot(infile, outfile):
         return
     
     hot = hots['hot_list'].astype('>i4')
-    hot_hash = int(sha512(hot.tostring()).hexdigest(), 16) & 0x7fffffff
+    hot_hash = int(sha512(hot.tobytes()).hexdigest(), 16) & 0x7fffffff
 
     print("**** Hotcells ****")
     print("number of hot cells:         ", hot.size)
@@ -58,22 +58,21 @@ def export_wgt(infile, outfile):
         return
 
     ds          = gains['down_sample']
-    lens        = gains['lens']
+    wgt         = gains['wgt']
 
-    ly, lx = lens.shape
+    ly, lx = wgt.shape
 
-    wgt = np.where(lens > 0, 1/lens, 0)
+    wgt[wgt < 0] = 0
     
     # normalize weights to [0,1]
-    wgt /= wgt.max()
     wgt = wgt.astype('>f4')
 
     width  = lx*ds
     height = ly*ds
-    wgt_hash = int(sha512(wgt.tostring()).hexdigest(), 16) & 0x7fffffff
+    wgt_hash = int(sha512(wgt.tobytes()).hexdigest(), 16) & 0x7fffffff
 
     print("**** Weights ****")
-    print("lens-shading map dims:   ", lens.shape)
+    print("lens-shading map dims:   ", wgt.shape)
     print("down sample:             ", ds)
     print("lx:                      ", lx)
     print("ly:                      ", ly)
@@ -152,7 +151,7 @@ def import_wgt(infile, outfile):
     ds = np.fromfile(f, dtype='>i4', count=1)[0]
     lx = np.fromfile(f, dtype='>i4', count=1)[0]
     ly = np.fromfile(f, dtype='>i4', count=1)[0]
-    wgt = np.fromfile(f, dtype='>f4')
+    wgt = np.fromfile(f, dtype='>f4').reshape(ly, lx)
     f.close()
 
     if wgt.size != lx*ly: 
@@ -164,8 +163,6 @@ def import_wgt(infile, outfile):
         print('Invalid data in', infile)
         print('Computed hash value does not match metadata')
         return
-
-    lens = np.where(wgt > 0, 1/wgt, 0).reshape(ly, lx)
 
     width  = lx*ds
     height = ly*ds
@@ -190,7 +187,7 @@ def import_wgt(infile, outfile):
     # Output to npz
     # 
 
-    np.savez(outfile, down_sample=ds, lens=lens)
+    np.savez(outfile, down_sample=ds, wgt=wgt)
 
     
 if __name__ == "__main__":

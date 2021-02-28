@@ -13,10 +13,10 @@ def find_cut(t0, hodo_times, thresh=0):
     alldiffs = []
     for i,evt in enumerate(t0):
         print('{} / {}'.format(i+1, t0.GetEntries()), end='\r')
-        if max(evt.cal) <= thresh: continue
-        for th in hodo_times.values():
-            diffs = evt.t_adj - th
-            alldiffs.append(diffs[np.abs(diffs) < 1000])
+        if max(evt.cal) >= thresh:
+            for th in hodo_times.values():
+                diffs = evt.t_adj - th
+                alldiffs.append(diffs[np.abs(diffs) < 1000])
     
     alldiffs = np.hstack(alldiffs)
     
@@ -201,13 +201,13 @@ if __name__ == '__main__':
     # load hodoscope data and compare time bounds
     hodo = np.load(args.hfile)
 
-    thmin = max(tpmin, hodo['ti'])
-    thmax = min(tpmax, hodo['tf'])
+    thmin = max(tpmin, hodo['interval_ti'][0])
+    thmax = min(tpmax, hodo['interval_tf'][-1])
 
     print('Copying TTrees')
     r.gROOT.cd()
-    t0 = t0_pre.CopyTree('t_adj > {} && t_adj < {}'.format(hodo['ti'], hodo['tf']))
-    tn = tn_pre.CopyTree('t_adj > {} && t_adj < {}'.format(hodo['ti'], hodo['tf']))
+    t0 = t0_pre.CopyTree('t_adj > {} && t_adj < {}'.format(hodo['interval_ti'][0], hodo['interval_tf'][-1]))
+    tn = tn_pre.CopyTree('t_adj > {} && t_adj < {}'.format(hodo['interval_ti'][0], hodo['interval_tf'][-1]))
     print('Done!')
     print()
 

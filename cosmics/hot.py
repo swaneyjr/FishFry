@@ -13,7 +13,7 @@ from unpack_trigger import unpack_all, show_header, interpret_header
 from calibrate import Calibrator 
 
 
-def process_npz(filename, calibrator, thresh=0, verbose=False):
+def process_dat(filename, calibrator, thresh=0, verbose=False):
     header,px,py,highest,region,timestamp,millistamp,images,dropped = unpack_all(filename)
     if verbose:
         show_header(header)
@@ -25,7 +25,7 @@ def process_npz(filename, calibrator, thresh=0, verbose=False):
     # otherwise, use the the highest prescale
     idx_regions = (highest == highest.max())
     if thresh: 
-        idx_regions &= (region[:, icenter] > thresh)
+        idx_regions &= (region[:, icenter] >= thresh)
 
     # return flattened indices with hits
     idx_occ = py[idx_regions]*calibrator.width + px[idx_regions]
@@ -44,7 +44,7 @@ def process_root(filename, calibrator, thresh=0, verbose=False):
             print(ievt+1, '/', trig.GetEntries(), end='\r')
         for x,y,cal in zip(evt.x, evt.y, evt.cal):
         
-            if cal > thresh:
+            if cal >= thresh:
                 idx = y * calibrator.width + x
                 if idx in calibrator.hot: continue
                 histogram[idx] += 1
@@ -60,7 +60,7 @@ if __name__ == "__main__":
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('files', metavar='FILE', nargs='+', help='file to process')
     parser.add_argument('--sandbox',action="store_true", help="run trial code")
-    parser.add_argument('--thresh',  type=int, default=1, help="calibrated threshold for occupancy count")
+    parser.add_argument('--thresh',  type=int, default=0, help="calibrated threshold for occupancy count")
     parser.add_argument('--calib', default='calib',help='location of calibration directory')
     parser.add_argument('--maxocc', default=1, type=int, help='maximum number of hits for "clean" pixel')
     parser.add_argument('-p', '--plot', action='store_true', help='plot pixel occupancies')
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     end = "\n" if args.verbose else "\r"
     for filename in args.files:
         print("processing file:  ", filename, end=end)
-        if filename.endswith('.npz'):
+        if filename.endswith('.dat'):
             occ += process_npz(filename, 
                 calibrator, 
                 args.thresh, 
@@ -108,7 +108,9 @@ if __name__ == "__main__":
             plt.hist(occ, bins=np.arange(occ.max()+1), log=True)
         else:
             plt.hist(occ, bins=200, log=True)
-        plt.title('Pixel occupancy')
+        plt.title('Pixel occupancies (clean)')
+        plt.xlabel('Trigger count')
+        plt.ylabel('Frequency (pixels)')
         plt.show()
 
     if args.commit:

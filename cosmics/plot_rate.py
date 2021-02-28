@@ -25,9 +25,9 @@ def plot(hist, norm=0, cum=False, ax=None, **kwargs):
     if norm:
         rate /= norm
         err /= norm
-        plt.ylabel("rate per image")
+        plt.ylabel("Rate (triggers per image)")
     else:
-        plt.ylabel('counts') 
+        plt.ylabel('Counts') 
 
     if ax:
         ax.errorbar(cbins,rate,yerr=err,fmt="o", **kwargs)
@@ -42,7 +42,7 @@ def calibrate_thresholds(rate, n_trig):
     prescale = 1
     for i in np.arange(cum_rate.size,0,-1)-1:
         while cum_rate[i] >= n_trig*prescale:
-            print("prescale: ", prescale, "threshold: ", i)
+            print("prescale: ", prescale, "threshold: ", i+2)
             prescale *= 8
     
 
@@ -86,10 +86,11 @@ if __name__ == "__main__":
     ax = plt.gca()
     hist_raw = hist_cln + hist_hot
     plot(hist_raw, norm=images, cum=args.cum, ax=ax, color="black", label='Raw')
-    plot(hist_cln, norm=images, cum=args.cum, ax=ax, color='blue', label='Clean')
-    plot(hist_wgt, norm=images, cum=args.cum, ax=ax, color='green', label='Calib')
+    plot(hist_cln, norm=images, cum=args.cum, ax=ax, color='blue', label='Hotcell-killing')
+    plot(hist_wgt, norm=images, cum=args.cum, ax=ax, color='green', label='Lens-shade scaling')
     
-    plt.xlabel("pixel value")
+    plt.xlabel("Pixel value")
+    plt.title('Pixel spectra with applied calibrations')
     plt.semilogy()
     plt.xlim(0,args.max)
 

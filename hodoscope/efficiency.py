@@ -3,23 +3,15 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def get_eff(a, b, c, center, t_range=(None, None), verbose=False): 
+from plot_coincidences import coincidences, add_voltage
 
-    tmin, tmax = t_range
-    if tmin:
-        a = a[a > tmin]
-        b = b[b > tmin]
-        c = c[c > tmin]
-    if tmax:
-        a = a[a < tmax]
-        b = b[b < tmax]
-        c = c[c < tmax]
+dt = (-1,0,1)
 
-    dt = (-1,0,1)
+def get_eff(a, b, c, center, verbose=False): 
 
-    ab  = np.unique(np.hstack([np.intersect1d(a,b+t) for t in dt]))
-    bc  = np.unique(np.hstack([np.intersect1d(b,c+t) for t in dt]))
-    ca  = np.unique(np.hstack([np.intersect1d(c,a+t) for t in dt]))
+    ab  = coincidences(a,b)
+    bc  = coincidences(b,c)
+    ca  = coincidences(c,a)
 
     if center == 'a': 
         abc = np.unique(np.hstack([np.intersect1d(bc,a+t) for t in dt]))
@@ -47,14 +39,79 @@ def get_eff(a, b, c, center, t_range=(None, None), verbose=False):
         print()
 
         print("eff = {:.5f} +/- {:.5f}".format(eff, eff_err))
+ 
+    return eff, eff_err, abc.size
 
-        print("min time:  ", a.min())
-        print("max time:  ", a.max())
-        print("tot time:  {:.2f} hr".format((a.max() - a.min()) / 3600000))
-        print("abc rate:  {:.5f} Hz".format(1000* abc.size / (a.max() - a.min())))
-        print()
 
-    return eff, eff_err
+def get_eff_curve(timestamps, thresholds, center, thresh_range=(0,256), verbose=False):
+    a, b, c = timestamps
+    thresh_a, thresh_b, thresh_c = thresholds
+
+    if center.lower() == 'a':
+        center_millis = a
+        center_thresh = thresh_a
+    elif center.lower() == 'b':
+        center_millis = b
+        center_thresh = thresh_b
+    elif center.lower() == 'c':
+        center_millis = c
+        center_thresh = thresh_c
+    else:
+        raise ValueError('Invalid center selection')
+
+    thresh = np.unique(center_thresh)
+
+    thresh_min, thresh_max = thresh_range
+    thresh = thresh[(thresh >= thresh_min) & (thresh < thresh_max)]
+
+    eff_all = []
+    eff_err = []
+    rates_all = []
+    rates_err = []
+
+    for t in thresh:
+        if verbose:
+            print('Threshold:', t)
+        t_millis = center_millis[center_thresh == t]
+        dt_millis = np.diff(t_millis)
+        dt_max = 1800000 # 30 min
+
+        tmin = [t_millis.min()] + list(t_millis[1:][dt_millis > dt_max])
+        tmax = list(t_millis[:-1][dt_millis > dt_max]) + [t_millis.max()]
+
+        tmin = np.array([tmin]).transpose()
+        tmax = np.array([tmax]).transpose()
+
+        thresh_cut_a = np.any((a > tmin) & (a < tmax), axis=0)
+        thresh_cut_b = np.any((b > tmin) & (b < tmax), axis=0)
+        thresh_cut_c = np.any((c > tmin) & (c < tmax), axis=0)
+
+        a_cut = a[thresh_cut_a]
+        b_cut = b[thresh_cut_b]
+        c_cut = c[thresh_cut_c]
+
+        eff, err, tot = get_eff(a_cut, b_cut, c_cut, center, verbose=verbose)
+        eff_all.append(eff)
+        eff_err.append(err)
+
+        if center == 'a':
+            counts = a_cut.size
+        elif center == 'b':
+            counts = b_cut.size
+        elif center == 'c':
+            counts = c_cut.size
+
+        duration = np.sum(tmax - tmin) / 1000
+
+        if verbose:
+            print("tot time:  {:.2f} hr".format(duration / 3600))
+            print("abc rate:  {:.5f} mHz".format(1000* tot / duration))
+            print('-----')
+
+        rates_all.append((counts - 2*tmin.size) / duration)
+        rates_err.append(np.sqrt(counts - 2*tmin.size) / duration)
+
+    return tuple(map(np.array, (thresh, eff_all, eff_err, rates_all, rates_err)))
 
     
 if __name__ == "__main__":
@@ -69,6 +126,7 @@ if __name__ == "__main__":
     group.add_argument('-c', action='store_true')
     parser.add_argument('--tmin', type=float, default=0, help='Minimum millistamp time')
     parser.add_argument('--tmax', type=float, default=1e20, help='Maximum millistamp time')
+    parser.add_argument('--thresh_range', type=int, nargs=2, default=(0,256), help='Min and max thresholds')
     parser.add_argument('-t', '--thresh', action='store_true', help='Graph efficiency dependence on threshold')
     parser.add_argument('-T', '--thresh_verbose', action='store_true', help='Graph and print counts')
 
@@ -80,89 +138,69 @@ if __name__ == "__main__":
         print("could not process file ", args.infile, " as .npz file.")
         exit(1)
 
-    old_format = 'chan_a' in npz.keys()
+    a = npz['millis_a']
+    b = npz['millis_b']
+    c = npz['millis_c']
 
-    a = npz['chan_a'] if old_format else npz['millis_a']
-    b = npz['chan_b'] if old_format else npz['millis_b']
-    c = npz['chan_c'] if old_format else npz['millis_c']
+    thresh_a = npz['thresh_a']
+    thresh_b = npz['thresh_b']
+    thresh_c = npz['thresh_c']
+
+    # apply time cuts
+    t_cut_a = (a >= args.tmin) & (a < args.tmax)
+    t_cut_b = (b >= args.tmin) & (b < args.tmax)
+    t_cut_c = (c >= args.tmin) & (c < args.tmax)
+
+    a = a[t_cut_a]
+    b = b[t_cut_b]
+    c = c[t_cut_c]
+
+    thresh_a = thresh_a[t_cut_a]
+    thresh_b = thresh_b[t_cut_b]
+    thresh_c = thresh_c[t_cut_c]
+
 
     if args.a:
-        center = 'a' 
+        center = 'a'
     elif args.b:
         center = 'b'
-        center_thresh = npz['thresh_b'] if not old_format else None
     elif args.c:
         center = 'c'
-        center_thresh = npz['thresh_c'] if not old_format else None
-     
 
-    if (args.thresh or args.thresh_verbose) and not old_format:
+    if args.thresh or args.thresh_verbose:
 
-        if args.a:
-            center_millis = npz['millis_a']
-            center_thresh = npz['thresh_a']
-        elif args.b:
-            center_millis = npz['millis_b']
-            center_thresh = npz['thresh_b']
-        elif args.c:
-            center_millis = npz['millis_c']
-            center_thresh = npz['thresh_c']
+        thresh, eff, eff_err, rates, rates_err = get_eff_curve((a,b,c), 
+                (thresh_a,thresh_b,thresh_c), 
+                center, 
+                args.thresh_range, 
+                args.thresh_verbose)
 
-        thresh_unique = np.unique(center_thresh)
-        thresh_valid = [] # select only thresholds with data in t range
-
-        eff_all = []
-        err_all = []
-        rates = []
-        rates_err = []
-
-        for t in thresh_unique:
-            t_millis = center_millis[center_thresh == t]
-            
-            # exclude data points outside t range
-            if t_millis.min() > args.tmax or t_millis.max() < args.tmin:
-                thresh_valid.append(False)
-                continue
-
-            thresh_valid.append(True)
-            tmin = max(args.tmin, t_millis.min())
-            tmax = min(args.tmax, t_millis.max())
-
-            eff, err = get_eff(a, b, c, center, t_range=(tmin, tmax), verbose=args.thresh_verbose)
-            eff_all.append(eff)
-            err_all.append(err)
-
-            if center == 'a':
-                counts = np.sum((a > tmin) & (a < tmax))
-            elif center == 'b':
-                counts = np.sum((b > tmin) & (b < tmax))
-            elif center == 'c':
-                counts = np.sum((c > tmin) & (c < tmax))
-
-            duration = (tmax - tmin) / 1000
-            rates.append((counts - 1) / duration)
-            rates_err.append(np.sqrt(counts - 1) / duration)
-
-        thresh = thresh_unique[thresh_valid]
-
+        plt.figure(figsize=(5,3))
         ax = plt.gca()
-        ax.errorbar(thresh, eff_all, yerr=err_all, c='b', marker='o', ms=3)
+        ax.errorbar(thresh, eff, yerr=eff_err, c='b', marker='o', ms=3)
         
         ax2 = ax.twinx()
         ax2.errorbar(thresh, rates, yerr=rates_err, c='r', marker='o', ms=3)
 
-        ax.set_xlabel('Threshold: {}'.format(center))
+        ax.set_xlabel('PWM threshold: {}'.format(center))
         ax.set_ylabel(r'$\epsilon$', color='b')
         ax.tick_params(axis='y', labelcolor='b')
+        ax.set_ylim(bottom=0)
+        if args.thresh_range[0] > 0:
+            ax.set_xlim(left = thresh_min-1)
+        if args.thresh_range[1] < 256:
+            ax.set_xlim(right = thresh_max)
+
         ax2.set_ylabel('Count rate (Hz)', color='r')
         ax2.tick_params(axis='y', labelcolor='r')
-        ax2.set_ylim(bottom=0)
+        ax2.set_ylim(0, .055)
+        
+        add_voltage(ax)
+
+        plt.tight_layout()
         plt.show()
 
     else:
-        get_eff(a, b, c, 
-            center, 
-            t_range=(args.tmin, args.tmax), 
-            verbose=True)
+        get_eff(a, b, c, center, verbose=True)
 
     npz.close()

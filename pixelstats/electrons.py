@@ -13,8 +13,8 @@ def load_electrons(calib):
     f_electrons = np.load(os.path.join(calib, 'electrons.npz'))
 
     gain = np.mean(f_electrons['gain'])
+    dark = np.mean(f_electrons['dark_noise'])
     blk  = f_electrons['blk_lvl']
-    dark = f_electrons['dark_noise']
 
     return gain, blk, dark
 
@@ -96,7 +96,7 @@ def plot_2x2(palettes, f, *args, superimpose=False, **kwargs):
 
 def plot_meanvar(palette, cmean, cvar, g, off):
     # plot cvar vs. cmean and gain vs raw mean
-    plt.hist2d(cmean.flatten(), cvar.flatten(), bins=(500,500), range=((0,1024),(0,2000)), norm=LogNorm(), cmap=palette.cmap)
+    plt.hist2d(cmean.flatten(), cvar.flatten(), bins=(500,500), range=((0,1024),(0,1500)), norm=LogNorm(), cmap=palette.cmap)
     plt.xlabel('Adjusted mean')
     plt.ylabel('Adjusted variance')
     plt.colorbar()
@@ -116,7 +116,7 @@ def plot_gain_xy(palette, g, vmin, vmax):
     plt.colorbar()
 
 def plot_gain_hist(palette, g, bins=None, vmin=0, vmax=7):
-    plt.hist(g.flatten(), bins=bins, color=palette.color, histtype='step')
+    plt.hist(g[np.logical_not(np.isnan(g))].flatten(), bins=bins, color=palette.color, histtype='step')
     plt.title('Gain values by channel')    
     plt.xlabel('Gain (DN/e-)')
     plt.ylabel('Pixel count')
@@ -136,7 +136,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    wgt = np.ones((2,2))
+    wgt = np.array([1])
 
     try:
         wgt = load_weights(args.calib)
@@ -173,7 +173,6 @@ if __name__ == '__main__':
     var   = np.moveaxis(var.reshape(-1, height//2, 2, width//2, 2), (2,4),(0,1))
     cmean = np.moveaxis(cmean.reshape(-1, height//2, 2, width//2, 2), (2,4),(0,1))
     cvar  = np.moveaxis(cvar.reshape(-1, height//2, 2, width//2, 2), (2,4),(0,1))
-    wgt   = np.moveaxis(wgt.reshape(-1, height//2, 2, width//2, 2), (2,4),(0,1))
 
 
     fit_gain = []
@@ -185,7 +184,7 @@ if __name__ == '__main__':
             cmean_ij = cmean[iy, ix].flatten()
             cvar_ij = cvar[iy, ix].flatten()
 
-            cut = (cmean_ij > 40) & (cmean_ij < 500) & (cvar_ij < 3000)
+            cut = (cmean_ij > args.black + 40) & (cmean_ij < 500) & (cvar_ij < 3000)
             cmean_cut = cmean_ij[cut]
             cvar_cut = cvar_ij[cut]
 
@@ -196,9 +195,6 @@ if __name__ == '__main__':
 
     fit_gain = np.array(fit_gain)
     fit_offset = np.array(fit_offset)
-    
-    print(fit_gain)
-    print(fit_offset)
 
     # now intersect these lines to find black level and dark noise
 
@@ -219,8 +215,7 @@ if __name__ == '__main__':
     blk_diff = 0
     blk_lvl = args.black + blk_diff
 
-    gain_all = np.mean(fit_gain)
-    dark_noise = np.mean(fit_offset - 1/12) / gain_all
+    dark_noise = (fit_offset - 1/12) / fit_gain**2
     
     print('Gain:')
     print(fit_gain)
@@ -228,11 +223,12 @@ if __name__ == '__main__':
     print('Dark noise:')
     print(dark_noise)
 
-    g_pt = (cvar - dark_noise*(fit_gain.reshape(2,2,1,1,1)/wgt + 1/12)**2) / (cmean-blk_diff)
+    g_pt = (cvar - dark_noise.reshape(2,2,1,1,1)*(fit_gain.reshape(2,2,1,1,1) + 1/12)**2) / (cmean-blk_diff)
 
-    # get range for bins?
+    # get range for bins
     
     gsorted = np.sort(g_pt.flatten())
+    gsorted = gsorted[gsorted>0]
     vmin = gsorted[gsorted.size//100]
     vmax = gsorted[-gsorted.size//100]
     bins = np.geomspace(vmin, vmax, 100)
@@ -242,6 +238,10 @@ if __name__ == '__main__':
     palettes = Palette.make(args.color_filter)
     plot_2x2(palettes, plot_meanvar, cmean, cvar, fit_gain, fit_offset)
     plot_2x2(palettes, plot_gain_mu, mean, g_pt, fit_gain)
+    
+    # clean out saturated values for next plots
+    g_pt[(cmean > 600) | (g_pt < 0)] = np.nan
+
     plot_2x2(palettes, plot_gain_xy, g_pt, vmin=vmin, vmax=vmax)
     plot_2x2(palettes, plot_gain_hist, g_pt, superimpose=True, bins=bins, vmin=vmin, vmax=vmax)
 

@@ -12,8 +12,11 @@ fishfry_dir = os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0, os.path.join(fishfry_dir, 'pixelstats'))
 from geometry import load_res
 
+# in Hz/m^2/sr
+MUON_INTENSITY = 100
+
 # in Hz*mm^-2
-HORIZ_MUON_FLUX = .000185
+HORIZ_MUON_FLUX = MUON_INTENSITY * np.pi/2 * 1e-6
 
 LYSO_X = 14.
 LYSO_Y = 16.
@@ -24,12 +27,12 @@ PIX_XY = 1.12e-3
 LYSO_LABELS = ['A', 'B', 'C']
 
 # generates a cos^2 distribution of theta values in [0,2*pi)
-def random_theta(n):
-    rand = np.random.random(n)
-    return np.arccos(rand**(1/4))
+def random_theta(n_samples, n=2):
+    rand = np.random.random(n_samples)
+    return np.arccos(rand**(1/(n+2)))
 
-def monte_carlo(n, xminus, xplus, yminus, yplus, zminus, zplus, initial=0, border=0, track_thresh=0):
-    
+def monte_carlo(n, xminus, xplus, yminus, yplus, zminus, zplus, initial=0, border=0, track_thresh=0, n_ang=2):
+
     x0 = np.random.uniform(xminus[initial]-border, xplus[initial]+border, n)
     y0 = np.random.uniform(yminus[initial]-border, yplus[initial]+border, n)
     z0 = (zplus[initial] + zminus[initial]) / 2
@@ -43,9 +46,9 @@ def monte_carlo(n, xminus, xplus, yminus, yplus, zminus, zplus, initial=0, borde
     zplus = np.array(zplus).reshape(-1,1)
 
     # geometrical acceptance of telescope
-    theta = random_theta(n)
+    theta = random_theta(n, n_ang)
     tan_theta = np.tan(theta)
-    phi = np.random.uniform(0, 2.0 * np.pi, n)
+    phi = np.random.uniform(0, 2*np.pi, n)
     cos_phi = np.cos(phi)
     sin_phi = np.sin(phi)
 
@@ -87,7 +90,7 @@ if __name__ == '__main__':
     parser.add_argument('--phone_z', type=float, default=None, help='Location of CMOS (if present) on z axis in mm')
     parser.add_argument('--lyso_z', required=True, type=float, nargs='+', help='Location of LYSO centers on z axis in mm')
     parser.add_argument('--N', type=int, dest='trials', default=100, help='Number of trials')
-    parser.add_argument('--n', type=int, default=100000, help='Number of particles to sample per trial')
+    parser.add_argument('--n', type=int, default=250000, help='Number of particles to sample per trial')
     parser.add_argument('--lyso_dxy', type=float, default=0.4, help='Horizontal LYSO uncertainty in mm')
     parser.add_argument('--lyso_dz', type=float, default=0.4, help='Vertical LYSO uncertainty in mm')
     parser.add_argument('--lyso_thresh', type=float, default=0, help='Minimum track length (in mm) within LYSO needed to trigger response')
@@ -151,7 +154,7 @@ if __name__ == '__main__':
     # first do hodoscope acceptances 
 
     # make the flux wider than the initial detector
-    border = LYSO_Z * np.tan(35*np.pi/180)
+    border = LYSO_Z * np.tan(75*np.pi/180) / 2
 
     lyso_idx = list(range(len(args.lyso_z)))
     pairs = {c for c in map(frozenset, it.product(lyso_idx, repeat=2)) if len(c) == 2}
@@ -209,7 +212,7 @@ if __name__ == '__main__':
             s_fmt = [LYSO_LABELS[x] for x in s]
             mu  = np.mean(p_all[si])
             sig = np.std(p_all[si])
-            print(u'P({} | {}) = {:.5f} \u00B1 {:.5f}'.format(' & '.join(s_fmt), LYSO_LABELS[i], mu, sig))
+            print(u'P({} | {}) = {:.5f} \u00B1 {:.5f} ({:.5f} mHz)'.format(' & '.join(s_fmt), LYSO_LABELS[i], mu, sig, lyso_rate * 1e3 * mu))
 
             # save hodoscope rate in case we are committing result
             if len(s) == 1:
