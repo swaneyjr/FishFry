@@ -32,7 +32,7 @@ def compute_rate(hist_tot, norm):
 
 def process_trig(filename,calibrator,verbose=False):
     # first unpack and display file contents
-    header,px,py,highest,region,timestamp,millistamp,images,dropped = trigger.unpack_all(filename)
+    header,px,py,highest,region,timestamp,millistamp,images,dropped,millis_images = trigger.unpack_all(filename)
     
     threshold,prescale = trigger.get_trigger(header) 
     

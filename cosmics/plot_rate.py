@@ -59,6 +59,7 @@ if __name__ == "__main__":
     parser.add_argument('--max',  type=int, default=200,help="maximum pixel value in rate plot (x-axis).")
     parser.add_argument('--cum',action="store_true", help="plot cumulative rate at each threshold")
     parser.add_argument('--n_trig',  metavar='NUM', type=int, default=10,help="find prescales and thresholds yielding NUM pixels per event.")
+    parser.add_argument('--small', action='store_true', help='Generate a small plot')
     args = parser.parse_args()
 
     hist_cln = 0
@@ -83,16 +84,21 @@ if __name__ == "__main__":
 
     images = int(images)
 
+    figsize = (4,3.2) if args.small else (7,5)
+    plt.figure(figsize=figsize, tight_layout=True)
+    ms = 2.5 if args.small else 3.5
     ax = plt.gca()
     hist_raw = hist_cln + hist_hot
-    plot(hist_raw, norm=images, cum=args.cum, ax=ax, color="black", label='Raw')
-    plot(hist_cln, norm=images, cum=args.cum, ax=ax, color='blue', label='Hotcell-killing')
-    plot(hist_wgt, norm=images, cum=args.cum, ax=ax, color='green', label='Lens-shade scaling')
+    plot(hist_raw, norm=images, cum=args.cum, ax=ax, color="black", label='Uncalibrated', ms=ms)
+    plot(hist_cln, norm=images, cum=args.cum, ax=ax, color='blue', label='Masking only', ms=ms)
+    plot(hist_wgt, norm=images, cum=args.cum, ax=ax, color='green', label='Masking & Scaling', ms=ms)
     
     plt.xlabel("Pixel value")
-    plt.title('Pixel spectra with applied calibrations')
+    if not args.small:
+        plt.title('Pixel spectra with applied calibrations')
     plt.semilogy()
     plt.xlim(0,args.max)
+    
 
     plt.legend()
     plt.show()

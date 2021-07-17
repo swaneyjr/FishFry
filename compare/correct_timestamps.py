@@ -38,7 +38,7 @@ def adjust_times(t0, starts, slopes, offsets):
     return t1
 
 
-def calibrate_drifts(th, tp, slope_lim, offset_lim, duration=0, tlim=10000): 
+def calibrate_drifts(th, tp, slope_lim, offset_lim, duration=0, tlim=5000): 
 
     th = np.sort(th)
     tp = np.sort(tp)
@@ -93,10 +93,10 @@ def calibrate_drifts(th, tp, slope_lim, offset_lim, duration=0, tlim=10000):
 
     print("Peak at {0:.1E}, {1:.1E}".format(peak_offset, peak_slope))
 
-    plt.figure()
+    plt.figure(figsize=(4,3), tight_layout=True)
     plt.imshow(slope_offset.transpose(), origin='lower', extent=(offset_min, offset_max, 3.6e6*slope_min, 3.6e6*slope_max), aspect='auto')
-    plt.xlabel('Offset (ms)')
-    plt.ylabel('Slope (ms/h)')
+    plt.xlabel('Offset [ms]')
+    plt.ylabel('Slope [ms/h]')
     plt.colorbar()  
  
     return alltimes+tp[0], alldiffs, peak_slope, peak_offset 
@@ -109,13 +109,13 @@ if __name__ == '__main__':
     parser.add_argument('--out', help='Name of output file')
     parser.add_argument('--hodo', dest='hfile', help='Calibrate time drifts with a .npz file of hodoscope times')
     parser.add_argument('--thresh', type=int, default=0, help='Cut on calibrated pixel values')
-    parser.add_argument('--calib', default='calib', help='Path to calibration directory')
+    parser.add_argument('--calib', help='Path to calibration directory')
     parser.add_argument('--slope_lim', nargs=2, type=float, default=(-100,100), help='Space-separated limits (min max) for slope in ms/hr')
     parser.add_argument('--offset_lim', nargs='+', type=float, default=(-1e3,1e3), help='Space-separated limits (min max) for offset in ms')
     parser.add_argument('--duration', type=int, default=0, help='Frame duration in ms')
     
     parser.add_argument('--splits', nargs='+', type=float, default=[], help='Timestamps of drift resets')
-    parser.add_argument('--dt_lim', type=float, default=10000, help='Bounds for time differences to display in ms')
+    parser.add_argument('--dt_lim', type=float, default=5000, help='Bounds for time differences to display in ms')
 
 
     parser.add_argument('-a', action='store_true', help='Use LYSO A for coincidences')
@@ -129,7 +129,7 @@ if __name__ == '__main__':
     t0 = pfile.Get('triggers')
 
 
-    if not len(args.splits) + 1 == len(args.offset_lim) // 2:
+    if not 2*len(args.splits) + 2 == len(args.offset_lim):
         raise ValueError('Incorrect number of arguments passed to --offset_lim')
 
     hodo = np.load(args.hfile)
@@ -149,9 +149,10 @@ if __name__ == '__main__':
     else:
         raise ValueError('Exactly two of -abc must be passed')
 
-    tp = np.array([trig.t for trig in t0 if max(trig.cal) >= args.thresh])
+    tp = np.array([trig.t for trig in t0 if trig.max >= args.thresh])
 
-    plt.figure(1)
+    plt.figure(figsize=(4,3), tight_layout=True)
+    ax1 = plt.gca()
     endpoints = [tp[0]] + list(args.splits) + [tp[-1] + 1]
     
     alltimes = []
@@ -189,19 +190,20 @@ if __name__ == '__main__':
         t = np.linspace(tmin-t_off, tmax-t_off, 25)
         bound = args.duration / 2
 
-        plt.figure(1)
-        plt.plot(t+t_off, slope*t + offset - bound, '--', color='gold')
-        plt.plot(t+t_off, slope*t + offset + bound, '--', color='gold')
+        ax1.plot((t+t_off-tp.min())/1000, slope*t + offset - bound, '--', color='gold')
+        ax1.plot((t+t_off-tp.min())/1000, slope*t + offset + bound, '--', color='gold')
     
-    plt.scatter(alltimes, alldiffs, s=0.1)
-    plt.ylim(offset_mean - args.dt_lim, offset_mean + args.dt_lim)
-    plt.xlabel(r'$t_\mathrm{hodo}$')
-    plt.ylabel(r'$t_\mathrm{phone} - t_\mathrm{hodo}$ (ms)')
+    ax1.scatter((np.array(alltimes)-tp.min())/1000, alldiffs, s=0.1)
+    ax1.set_ylim(offset_mean - args.dt_lim, offset_mean + args.dt_lim)
+    ax1.set_xlabel('Time of scintillator tag [s]', fontsize=11)
+    ax1.set_ylabel(r'$\Delta t$ (CMOS, scintillator) [ms]', fontsize=11)
+    ax1.ticklabel_format(axis='x', style='sci', scilimits=(-5,5))
     plt.show()
 
     if args.out:
-        fdrift = os.path.join(args.calib, 'drifts.npz')
-        np.savez(fdrift, starts=starts, slopes=slopes, offsets=offsets)
+        if args.calib:
+            fdrift = os.path.join(args.calib, 'drifts.npz')
+            np.savez(fdrift, starts=starts, slopes=slopes, offsets=offsets)
  
         print('Writing triggers')
         f = r.TFile(args.out, 'RECREATE')

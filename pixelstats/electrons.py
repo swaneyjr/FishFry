@@ -76,51 +76,55 @@ def fit(cmean, cvar, nbins=100):
     return peak_slope, peak_offset
 
 
-def plot_2x2(palettes, f, *args, superimpose=False, **kwargs):
+def plot_2x2(palettes, f, *args, superimpose=False, small=False, pick1=-1, **kwargs):
  
-    plt.figure(figsize=(10,8))
+    figsize = (3.8,3) if small else (10,8)
+    if pick1 >= 0 or superimpose:
+        plt.figure(figsize=figsize, tight_layout=True)
+    else:
+        fig, axes = plt.subplots(2, 2, figsize=figsize, tight_layout=True)
 
     for ij in range(4): 
-
+        if pick1 >= 0 and pick1 != ij: continue 
+        
         i = ij %  2
         j = ij // 2
 
         cargs = [a[j, i] for a in args]
+        ax = plt.gca() if pick1 >= 0 or superimpose else axes[j, i]
 
-        if superimpose:
-            f(palettes[ij], *cargs, **kwargs)
+        if superimpose or pick1 >= 0:
+            f(ax, palettes[ij], *cargs, **kwargs)
         else:
-            plt.subplot(2,2,ij+1)
-            f(palettes[ij], *cargs, **kwargs)
+            f(ax, palettes[ij], *cargs, **kwargs)
 
-
-def plot_meanvar(palette, cmean, cvar, g, off):
+def plot_meanvar(ax, palette, cmean, cvar, g, off):
     # plot cvar vs. cmean and gain vs raw mean
-    plt.hist2d(cmean.flatten(), cvar.flatten(), bins=(500,500), range=((0,1024),(0,1500)), norm=LogNorm(), cmap=palette.cmap)
-    plt.xlabel('Adjusted mean')
-    plt.ylabel('Adjusted variance')
-    plt.colorbar()
-    plt.plot(np.arange(800), np.arange(800)*g + off, 'y-')
+    ax.hist2d(cmean.flatten(), cvar.flatten(), bins=(500,500), range=((0,1024),(0,1500)), norm=LogNorm(), cmap=palette.cmap)
+    ax.set_xlabel(r'$\mu\,/\,\lambda(r)$')
+    ax.set_ylabel(r'$\sigma^2\,/\,\lambda(r)^2$')
+    #plt.colorbar()
+    ax.plot(np.arange(800), np.arange(800)*g + off, 'y-')
     
 
-def plot_gain_mu(palette, mu, g_pt, g):
-    plt.hist2d(mu.flatten(), g_pt.flatten(), bins=(500, 500), range=((0,1024), (0,3)), norm=LogNorm(), cmap=palette.cmap)
-    plt.xlabel('Sample mean')
-    plt.ylabel('Gain')
-    plt.colorbar()
-    plt.plot(np.arange(800), np.repeat(g, 800), 'y-')
+def plot_gain_mu(ax, palette, mu, g_pt, g):
+    ax.hist2d(mu.flatten(), g_pt.flatten(), bins=(500, 500), range=((0,1024), (0,3)), norm=LogNorm(), cmap=palette.cmap)
+    ax.set_xlabel('Sample mean')
+    ax.set_ylabel('Gain')
+    #plt.colorbar()
+    ax.plot(np.arange(800), np.repeat(g, 800), 'y-')
     
 
-def plot_gain_xy(palette, g, vmin, vmax):
-    plt.imshow(np.nanmean(g,axis=0), cmap=palette.cmap, vmin=vmin, vmax=vmax)
-    plt.colorbar()
+def plot_gain_xy(ax, palette, g, vmin, vmax):
+    ax.imshow(np.nanmean(g,axis=0), cmap=palette.cmap, vmin=vmin, vmax=vmax)
+    #plt.colorbar()
 
-def plot_gain_hist(palette, g, bins=None, vmin=0, vmax=7):
-    plt.hist(g[np.logical_not(np.isnan(g))].flatten(), bins=bins, color=palette.color, histtype='step')
-    plt.title('Gain values by channel')    
-    plt.xlabel('Gain (DN/e-)')
-    plt.ylabel('Pixel count')
-    plt.loglog()
+def plot_gain_hist(ax, palette, g, bins=None, vmin=0, vmax=7):
+    ax.hist(g[np.logical_not(np.isnan(g))].flatten(), bins=bins, color=palette.color, histtype='step')
+    ax.set_title('Gain values by channel')    
+    ax.set_xlabel('Gain [DN/e-]')
+    ax.set_ylabel('Pixel count')
+    ax.loglog()
 
 
 if __name__ == '__main__':
@@ -132,6 +136,8 @@ if __name__ == '__main__':
     parser.add_argument('--calib', help='path to calibration directory')
     parser.add_argument('--color_filter', choices=('RGGB','GRBG','GBRG','BGGR'), help='color filter arrangement')
     parser.add_argument('--black', type=float, default=0, help='Estimate of black level offset')
+    parser.add_argument('--small', action='store_true', help='Generate small plots')
+    parser.add_argument('--pick1', type=int, default=-1, help='Plot only one channel')
     parser.add_argument('--commit', action='store_true', help='store result to .npz') 
 
     args = parser.parse_args()
@@ -236,14 +242,18 @@ if __name__ == '__main__':
     # make plots
 
     palettes = Palette.make(args.color_filter)
-    plot_2x2(palettes, plot_meanvar, cmean, cvar, fit_gain, fit_offset)
-    plot_2x2(palettes, plot_gain_mu, mean, g_pt, fit_gain)
+    plot_2x2(palettes, plot_meanvar, cmean, cvar, fit_gain, fit_offset, 
+            small=args.small, pick1=args.pick1)
+    plot_2x2(palettes, plot_gain_mu, mean, g_pt, fit_gain,
+            small=args.small, pick1=args.pick1)
     
     # clean out saturated values for next plots
     g_pt[(cmean > 600) | (g_pt < 0)] = np.nan
 
-    plot_2x2(palettes, plot_gain_xy, g_pt, vmin=vmin, vmax=vmax)
-    plot_2x2(palettes, plot_gain_hist, g_pt, superimpose=True, bins=bins, vmin=vmin, vmax=vmax)
+    plot_2x2(palettes, plot_gain_xy, g_pt, 
+            vmin=vmin, vmax=vmax, small=args.small, pick1=args.pick1)
+    plot_2x2(palettes, plot_gain_hist, g_pt, superimpose=True, bins=bins, 
+            vmin=vmin, vmax=vmax, small=args.small, pick1=args.pick1)
 
     plt.show()
 

@@ -35,23 +35,28 @@ def export(hot_cells, outfile):
 def plot(mean, variance, snd_max, cut_mean, cut_variance, cut_snd_max, vmax):
     print('\nplotting figures:')
     
-    plt.figure(figsize=(12,6))
-    plt.subplot(121) 
+    figsize = (4,3) if args.small else (12,6)
+    plt.figure(figsize=figsize, tight_layout=True)
+    if not args.small:
+        plt.subplot(121) 
+        plt.title('Before cut')
     cut = np.random.randint(mean.size, size=100000)
     plt.scatter(mean[cut], variance[cut], c=snd_max[cut], s=0.5, cmap='rainbow', vmax=vmax)
     #plt.hist2d(mean, variance, bins=500, norm=LogNorm())
-    plt.title('Variance vs. Mean: Before cut')
-    plt.xlabel('Mean')
-    plt.ylabel('Variance')
+    plt.xlabel(r'$\mu\,/\,\lambda(r)$')
+    plt.ylabel(r'$\sigma^2\,/\,\lambda(r)^2$')
     plt.colorbar()
 
-    plt.subplot(122)
+    if args.small:
+        plt.figure(figsize=figsize, tight_layout=True)
+    else:
+        plt.subplot(122)
+        plt.title('After cut')
     cut = np.random.randint(cut_mean.size, size=100000)
     plt.scatter(cut_mean[cut], cut_variance[cut], c=cut_snd_max[cut], s=0.5, cmap='rainbow', vmax=vmax)
-    #plt.hist2d(cut_mean, cut_variance, bins=500, norm=LogNorm())
-    plt.title('Variance vs. Mean: After cut')
-    plt.xlabel('Mean')
-    plt.ylabel('Variance')
+    #plt.hist2d(cut_mean, cut_variance, bins=500, norm=LogNorm()) 
+    plt.xlabel(r'$\mu\,/\,\lambda(r)$')
+    plt.ylabel(r'$\sigma^2\,/\,\lambda(r)^2$')
     plt.colorbar()
   
     plt.show()
@@ -156,6 +161,7 @@ if __name__ == '__main__':
     parser.add_argument('--commit', action='store_true', help='commit to hot_online.npz')
     parser.add_argument('--raw', action='store_true', help='Do not apply lens shading corrections')
     parser.add_argument('--plot', action="store_true", help="plot hotcell elimination results")
+    parser.add_argument('--small', action='store_true', help='Use small plot size')
 
     args = parser.parse_args()
     data = np.load(args.dark)

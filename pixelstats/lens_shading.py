@@ -100,7 +100,7 @@ def downsample(calib, rsq_thresh=0, calib_dark=True, calib_hot=True, ds=4):
 
     return g_av, b_av
 
-def radial_correct(stat, n_points=20, plot=False):
+def radial_correct(stat, n_points=20, plot=False, small=False):
     sy, sx = stat.shape
     
     X, Y = np.meshgrid(np.arange(sx), np.arange(sy))
@@ -124,25 +124,27 @@ def radial_correct(stat, n_points=20, plot=False):
     fit_y = f(fit_x, *y)
 
     # naive sec^(2p) function
-    def g(x, x0, a, p):
-        return a*(1 + (x/x0)**2)**p
+    def g(x, x0, a):
+        return a*(1 + (x/x0)**2)**2
 
-    p1 = [1000, np.mean(stat), 0]
+    p1 = [1000, np.mean(stat)]
     p, _ = optimize.curve_fit(g, R.flatten(), stat.flatten(), p1)
     fit_sec = g(fit_x, *p)
 
     print('Secant fit:')
     print('a = {:.3f}'.format(p[1]))
-    print('p = {:.3f}'.format(p[2]/2))
+    #print('p = {:.3f}'.format(p[2]/2))
     print('z = {:.3f}'.format(p[0]))
 
     if plot:
-        plt.figure()
-        plt.plot(fit_x, fit_y, 'y-', label='piecewise linear')
-        plt.plot(fit_x, fit_sec, 'r-', label='secant')
+        figsize = (3.5,2.6) if small else (7,5)
+        plt.rc('font', size=16)
+        plt.figure(figsize=figsize, tight_layout=True)
+        plt.plot(fit_x, fit_y, 'y-', label='Piecewise linear')
+        plt.plot(fit_x, fit_sec, 'r-', label=r'$\sec^4 \theta$')
         plt.hist2d(R.flatten(), stat.flatten(), bins=(500,500), norm=LogNorm(), cmap='Purples')
-        plt.title('Radial gain fit')
-        plt.xlabel('Radius (pix)')
+        #plt.title('Radial gain fit')
+        plt.xlabel('Radius [pixels]')
         plt.ylabel('Gain')
         plt.legend()
 
@@ -155,11 +157,16 @@ def load(calib):
     flens.close()
     return lens
 
-def plot(lens, min_gain=None, max_gain=None):
+def plot(lens, min_gain=None, max_gain=None, small=False):
     print('plotting computed lens')
-    plt.figure()
-    plt.title('Smoothed gain')
-    plt.imshow(lens, vmin=min_gain, vmax=max_gain)
+    figsize = (4, 2.6) if small else (8, 5)
+    plt.figure(figsize=figsize, tight_layout=True)
+    plt.rc('font', size=16)
+    #plt.title('Smoothed gain')
+    plt.imshow(lens, vmin=min_gain, vmax=max_gain, origin='lower',
+            extent=[0, lens.shape[1]*4, 0, lens.shape[0]*4])
+    plt.xlabel('x [pixels]')
+    plt.ylabel('y [pixels]')
     plt.colorbar()
     #plt.savefig("plots/lens.pdf")
     plt.show()
@@ -185,12 +192,13 @@ if __name__ == "__main__":
     parser.add_argument('--radial', action='store_true', help='Use radially symmetric weights')
     parser.add_argument('--commit', action="store_true", help="commit lens.npz file")
     parser.add_argument('--plot', action="store_true", help="plot lens shading values")
+    parser.add_argument('--small', action='store_true', help='generate smaller plots')
 
     args = parser.parse_args()
     
     if args.plot_only:
         lens = load(args.calib) 
-        plot(lens, args.min_gain, args.max_gain)
+        plot(1/lens.wgt, args.min_gain, args.max_gain, small=args.small)
         
     else: 
         lens, offset = downsample(args.calib, 
@@ -200,7 +208,7 @@ if __name__ == "__main__":
                 ds=args.down_sample)
   
         if args.radial:
-            lens = radial_correct(lens, plot=args.plot) 
+            lens = radial_correct(lens, plot=args.plot, small=args.small) 
 
         if args.commit:
             
@@ -211,6 +219,6 @@ if __name__ == "__main__":
                     wgt=lens.min()/lens)
 
         if args.plot: 
-            plot(lens, args.min_gain, args.max_gain)
+            plot(lens, args.min_gain, args.max_gain, args.small)
 
 

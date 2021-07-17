@@ -22,8 +22,6 @@ LYSO_X = 14.
 LYSO_Y = 16.
 LYSO_Z = 6.
 
-PIX_XY = 1.12e-3
-
 LYSO_LABELS = ['A', 'B', 'C']
 
 # generates a cos^2 distribution of theta values in [0,2*pi)
@@ -88,48 +86,50 @@ if __name__ == '__main__':
     from argparse import ArgumentParser
     parser = ArgumentParser(description='Find relevant geometrical acceptance factors') 
     parser.add_argument('--phone_z', type=float, default=None, help='Location of CMOS (if present) on z axis in mm')
+    parser.add_argument('--pix_pitch', type=float, default=1.12, help='Pixel pitch in microns')
     parser.add_argument('--lyso_z', required=True, type=float, nargs='+', help='Location of LYSO centers on z axis in mm')
-    parser.add_argument('--N', type=int, dest='trials', default=100, help='Number of trials')
-    parser.add_argument('--n', type=int, default=250000, help='Number of particles to sample per trial')
+    parser.add_argument('--Nt', type=int, dest='trials', default=100, help='Number of trials')
+    parser.add_argument('--Np', type=int, default=250000, help='Number of particles to sample per trial')
+    parser.add_argument('--n', type=float, default=2, help='Exponent in zenith angle intensity dependence')
     parser.add_argument('--lyso_dxy', type=float, default=0.4, help='Horizontal LYSO uncertainty in mm')
     parser.add_argument('--lyso_dz', type=float, default=0.4, help='Vertical LYSO uncertainty in mm')
     parser.add_argument('--lyso_thresh', type=float, default=0, help='Minimum track length (in mm) within LYSO needed to trigger response')
+    parser.add_argument('--lyso_thresh_err', type=float, default=0, help='Uncertainty in --lyso_thresh argument')
     parser.add_argument('--phone_dxy', type=float, default=0.4, help='Horizontal phone uncertainty in mm')
     parser.add_argument('--phone_dz', type=float, default=0.4, help='Vertical phone uncertainty in mm')
     parser.add_argument('--rot', action='store_true', help='Long dimension of CMOS corresponds to short end of LYSO')
     parser.add_argument('--calib', default='calib', help='Path to calibration directory')
     parser.add_argument('--commit', action='store_true', help='Save results to calibration directory')
     
-
-
     args = parser.parse_args()
 
     x = []
     y = []
     zplus = []
     zminus = []
+    track_thresh = []
 
     sig_xy = []
-    sig_z = []
+    sig_z = [] 
+    sig_thresh = []
 
-    track_thresh = []
-    
     for z in args.lyso_z:
         x.append(LYSO_X)
         y.append(LYSO_Y)
         zminus.append(z - LYSO_Z / 2)
         zplus.append(z + LYSO_Z / 2)
-        
+        track_thresh.append(args.lyso_thresh)
+
         sig_xy.append(args.lyso_dxy)
         sig_z.append(args.lyso_dz)
+        sig_thresh.append(args.lyso_thresh_err) 
 
-        track_thresh.append(args.lyso_thresh)
 
     if not args.phone_z is None:
         sys.path.insert(1, '../pixelstats')
         from geometry import load_res
 
-        cmos_size = PIX_XY * np.array(load_res(args.calib)) 
+        cmos_size = args.pix_pitch/1000 * np.array(load_res(args.calib)) 
         if args.rot:
             x.append(cmos_size[0])
             y.append(cmos_size[1])
@@ -138,18 +138,20 @@ if __name__ == '__main__':
             y.append(cmos_size[0])
         zminus.append(args.phone_z-0.001)
         zplus.append(args.phone_z+0.001)
+        track_thresh.append(0)
 
         sig_xy.append(args.phone_dxy)
         sig_z.append(args.phone_dz)
-
-        track_thresh.append(0)
+        sig_thresh.append(0)
+ 
 
     x = np.array(x)
     y = np.array(y)
     zminus = np.array(zminus)
     zplus = np.array(zplus)
     sig_xy = np.array(sig_xy)
-    sig_z = np.array(sig_z) 
+    sig_z = np.array(sig_z)
+    track_thresh = np.array(track_thresh)
 
     # first do hodoscope acceptances 
 
@@ -183,15 +185,16 @@ if __name__ == '__main__':
             dx = np.random.normal(0, sig_xy, x.size)
             dy = np.random.normal(0, sig_xy, x.size)
             dz = np.random.normal(0, sig_z,  x.size)
+            dt = np.random.normal(0, sig_thresh, x.size)
 
-            hits = monte_carlo(args.n, 
+            hits = monte_carlo(args.Np, 
                     -x/2+dx,
                     x/2+dx,
                     -y/2+dy,
                     y/2+dy,
                     zminus+dz, 
                     zplus+dz, 
-                    i, border, track_thresh)
+                    i, border, track_thresh+dt)
             hits_initial = hits.sum(axis=1)[i]
         
             for si, s in enumerate(sets):
@@ -202,7 +205,7 @@ if __name__ == '__main__':
             
         
         # these are independent of geometrical uncertainties
-        t_elapsed = args.n / HORIZ_MUON_FLUX / (sx * sy)
+        t_elapsed = args.Np / HORIZ_MUON_FLUX / (sx * sy)
         lyso_rate = hits.sum(axis=1)[i] / t_elapsed
                 
         print('Simulated elapsed time:  {} min'.format(t_elapsed // 60))
@@ -245,15 +248,17 @@ if __name__ == '__main__':
             dx = np.random.normal(0, sig_xy, x.size)
             dy = np.random.normal(0, sig_xy, x.size)
             dz = np.random.normal(0, sig_z,  x.size)
+            dt = np.random.normal(0, sig_thresh, x.size)
 
-            hits = monte_carlo(args.n, 
+            hits = monte_carlo(args.Np, 
                     -x/2+dx,
                     x/2+dx,
                     -y/2+dy,
                     y/2+dy,
                     zminus+dz, 
                     zplus+dz, 
-                    -1)
+                    -1, 0, track_thresh+dt,
+                    n_ang=args.n)
             hits_initial = hits.sum(axis=1)[-1]
 
             for si, s in enumerate(sets): 
@@ -262,7 +267,7 @@ if __name__ == '__main__':
                 p = np.logical_and.reduce(hs).sum() / hits_initial
                 p_all[si].append(p)
 
-        t_elapsed = args.n / HORIZ_MUON_FLUX / np.product(cmos_size)
+        t_elapsed = args.Np / HORIZ_MUON_FLUX / np.product(cmos_size)
         phone_rate = hits.sum(axis=1)[-1] / t_elapsed
 
         print('Simulated elapsed time:  {} min'.format(t_elapsed // 60))
@@ -280,32 +285,33 @@ if __name__ == '__main__':
             print(u'P({} | {}) = {:.5f} \u00B1 {:.5f}'.format(' & '.join(s_fmt), 'PHONE', mu, sig))
 
 
+    d = {}
+    for s in pairs:
+        
+        l1,l2 = [LYSO_LABELS[l] for l in sorted(list(s))]
+
+        p_hgp = p_phone[s]
+        p_hgp_err = p_phone_err[s]
+
+        p_pgh = p_hgp * np.product(cmos_size) / (LYSO_X*LYSO_Y) / p_hodo[s]
+        p_pgh_err = p_pgh * np.sqrt((p_hgp_err / p_hgp)**2 + (p_hodo_err[s] / p_hodo[s])**2) 
+
+        print()
+        print(u'P({} & {} | PHONE) = {:.5f} \u00B1 {:.5f}'.format(l1, l2, p_hgp, p_hgp_err))
+        print(u'P(PHONE | {} & {}) = {:.5f} \u00B1 {:.5f}'.format(l1, l2, p_pgh, p_pgh_err))
+        print('Hodo rate {}{} = {:.5f} mHz'.format(l1, l2, 1e3*hodo_rate[s]))
+
+        
+        d['p_hgp_{}{}'.format(l1, l2)] = p_hgp 
+        d['p_hgp_err_{}{}'.format(l1, l2)] = p_hgp_err
+        d['p_pgh_{}{}'.format(l1, l2)] = p_pgh
+        d['p_pgh_err_{}{}'.format(l1, l2)] = p_pgh_err
+        d['hodo_acc_{}{}'.format(l1, l2)] = hodo_rate[s] / HORIZ_MUON_FLUX
+
+
     if args.commit:
         print()
         print('Saving to acceptance.npz:')
 
-        d = {}
-
-        for s in pairs:
-            
-            l1,l2 = [LYSO_LABELS[l] for l in sorted(list(s))]
-
-            p_hgp = p_phone[s]
-            p_hgp_err = p_phone_err[s]
-
-            p_pgh = p_hgp * np.product(cmos_size) / (LYSO_X*LYSO_Y) / p_hodo[s]
-            p_pgh_err = p_pgh * np.sqrt((p_hgp_err / p_hgp)**2 + (p_hodo_err[s] / p_hodo[s])**2) 
- 
-            print(u'P({} & {} | PHONE) = {:.5f} \u00B1 {:.5f}'.format(l1, l2, p_hgp, p_hgp_err))
-            print(u'P(PHONE | {} & {}) = {:.5f} \u00B1 {:.5f}'.format(l1, l2, p_pgh, p_pgh_err))
-            print('Hodo rate {}{} = {:.5f} mHz'.format(l1, l2, 1e3*hodo_rate[s]))
-            print()
-
-            d['p_hgp_{}{}'.format(l1, l2)] = p_hgp 
-            d['p_hgp_err_{}{}'.format(l1, l2)] = p_hgp_err
-            d['p_pgh_{}{}'.format(l1, l2)] = p_pgh
-            d['p_pgh_err_{}{}'.format(l1, l2)] = p_pgh_err
-            d['hodo_acc_{}{}'.format(l1, l2)] = hodo_rate[s] / HORIZ_MUON_FLUX
-        
         np.savez(os.path.join(args.calib, 'acceptance.npz'),  **d)
 

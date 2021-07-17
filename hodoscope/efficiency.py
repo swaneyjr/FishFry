@@ -7,6 +7,37 @@ from plot_coincidences import coincidences, add_voltage
 
 dt = (-1,0,1)
 
+def load(infiles):
+    
+    a = []
+    b = []
+    c = []
+
+    thresh_a = []
+    thresh_b = []
+    thresh_c = []
+
+    for f in infiles:
+        
+        try:
+            npz = np.load(f)
+        except:
+            print("could not process file ", f, " as .npz file.")
+            exit(1)
+
+        a.append(npz['millis_a'])
+        b.append(npz['millis_b'])
+        c.append(npz['millis_c'])
+
+        thresh_a.append(npz['thresh_a'])
+        thresh_b.append(npz['thresh_b'])
+        thresh_c.append(npz['thresh_c'])
+
+        npz.close()
+
+    return tuple(map(np.hstack, (a,b,c,thresh_a,thresh_b,thresh_c)))
+    
+
 def get_eff(a, b, c, center, verbose=False): 
 
     ab  = coincidences(a,b)
@@ -119,7 +150,7 @@ if __name__ == "__main__":
     from argparse import ArgumentParser
     parser = ArgumentParser()
 
-    parser.add_argument('infile', metavar='FILE', help='file to process')
+    parser.add_argument('infiles', metavar='FILE', nargs='+', help='files to process')
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-a', action='store_true')
     group.add_argument('-b', action='store_true')
@@ -132,19 +163,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    try:
-        npz = np.load(args.infile)
-    except:
-        print("could not process file ", args.infile, " as .npz file.")
-        exit(1)
-
-    a = npz['millis_a']
-    b = npz['millis_b']
-    c = npz['millis_c']
-
-    thresh_a = npz['thresh_a']
-    thresh_b = npz['thresh_b']
-    thresh_c = npz['thresh_c']
+    a, b, c, thresh_a, thresh_b, thresh_c = load(args.infiles)
 
     # apply time cuts
     t_cut_a = (a >= args.tmin) & (a < args.tmax)
@@ -175,23 +194,24 @@ if __name__ == "__main__":
                 args.thresh_range, 
                 args.thresh_verbose)
 
-        plt.figure(figsize=(5,3))
+        plt.figure(figsize=(4.4,3))
         ax = plt.gca()
         ax.errorbar(thresh, eff, yerr=eff_err, c='b', marker='o', ms=3)
         
         ax2 = ax.twinx()
         ax2.errorbar(thresh, rates, yerr=rates_err, c='r', marker='o', ms=3)
 
-        ax.set_xlabel('PWM threshold: {}'.format(center))
-        ax.set_ylabel(r'$\epsilon$', color='b')
+        ax.set_xlabel('PWM threshold: {}'.format(center.upper()))
+        ax.set_ylabel('Efficiency', color='b')
         ax.tick_params(axis='y', labelcolor='b')
         ax.set_ylim(bottom=0)
-        if args.thresh_range[0] > 0:
+        thresh_min, thresh_max = args.thresh_range
+        if thresh_min > 0:
             ax.set_xlim(left = thresh_min-1)
-        if args.thresh_range[1] < 256:
+        if thresh_max < 256:
             ax.set_xlim(right = thresh_max)
 
-        ax2.set_ylabel('Count rate (Hz)', color='r')
+        ax2.set_ylabel('Count rate [Hz]', color='r')
         ax2.tick_params(axis='y', labelcolor='r')
         ax2.set_ylim(0, .055)
         
@@ -203,4 +223,4 @@ if __name__ == "__main__":
     else:
         get_eff(a, b, c, center, verbose=True)
 
-    npz.close()
+    

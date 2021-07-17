@@ -34,6 +34,8 @@ def process(filename, args):
     print('hot:  ', hist_hot[:100], '...\n')
     print('calib:', hist_cal[:100], '...')
 
+    return hist_cln, hist_hot, hist_cal
+
 
 if __name__ == "__main__":
     example_text = '''examples:
@@ -44,11 +46,17 @@ if __name__ == "__main__":
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('files', metavar='FILE', nargs='+', help='file to process')
     parser.add_argument('--sandbox',action="store_true", help="run sandbox code and exit (for development).")
+    parser.add_argument('--out', help='.npz file with hist data')
     args = parser.parse_args()
 
+    cal_all = np.zeros(1024)
     for filename in args.files:
         print("processing file:  ", filename)
-        process(filename, args)
+        _, _, cal = process(filename, args)
+        cal_all += cal
+
+    if args.out:
+        np.savez(args.out, counts=cal_all)
 
 
 

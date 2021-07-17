@@ -32,9 +32,9 @@ kernel21 = np.array([[0,1,1,1,0],
                      [0,1,1,1,0]])
 
 
-def process(filename, calibrator, thresh=0, tmin=0, tmax=np.inf, verbose=False):
+def process(filename, calibrator, thresh=1, tmin=0, tmax=np.inf, xborder=0, verbose=False):
 
-    header,px,py,highest,raw_region,timestamp,millistamp,images,dropped = unpack_all(filename)
+    header,px,py,highest,raw_region,timestamp,millistamp,images,dropped,millis_images = unpack_all(filename)
 
     cal_region = calibrator.calibrate_region(px,py,raw_region,header)
     icenter = raw_region.shape[1]//2
@@ -43,12 +43,9 @@ def process(filename, calibrator, thresh=0, tmin=0, tmax=np.inf, verbose=False):
 
     tlim_cut = (millistamp > tmin) & (millistamp < tmax)
     thresh_cut = (highest==prescale.size) & (cal_region[:,icenter] >= thresh)
-    keep = tlim_cut & thresh_cut
-
-    if verbose:
-        print("found ", np.sum(hot), " hot regions.")
-        print("found ", np.sum(np.logical_not(hot)), " non-hot regions.") 
-    
+    border_cut = (px >= xborder) & (py < calibrator.width-xborder)
+    keep = tlim_cut & thresh_cut & border_cut
+ 
     t = millistamp[keep]
     x = px[keep]
     y = py[keep]
@@ -59,8 +56,11 @@ def process(filename, calibrator, thresh=0, tmin=0, tmax=np.inf, verbose=False):
     sum9 = (kernel9.flatten() * cal_region[keep]).sum(axis=1)
     sum21 = (kernel21.flatten() * cal_region[keep]).sum(axis=1)
 
-    t_all = np.unique(millistamp[tlim_cut])
-    t0 = t_all[np.logical_not(np.isin(t_all, t))]
+    t0 = millis_images[np.logical_not(np.isin(millis_images, t))]
+
+    if verbose:
+        print('Keeping', np.unique(t).size, '/', millis_images.size)
+
 
     return t, x, y, raw, cal, sum5, sum9, sum21, t0
  
@@ -144,8 +144,9 @@ if __name__ == "__main__":
     parser.add_argument('--max',  type=int, default=50,help="maximum pixel value in rate plot (x-axis).")
     parser.add_argument('--plot', action='store_true',help='plot histogram of triggered values')
     parser.add_argument('--out', help='name of output ROOT file')
-    parser.add_argument('--thresh', type=int, default=0, help='only save values at or above threshold')
+    parser.add_argument('--thresh', type=int, default=1, help='only save values at or above threshold')
     parser.add_argument('--no_hotcell', action='store_true', help='trigger without offline hotcell cleaning')
+    parser.add_argument('--xborder', type=int, default=0, help='Cut x edge to change effective area')
     parser.add_argument('-v', '--verbose', action='store_true', help='enable verbose output')
     args = parser.parse_args() 
 
@@ -170,9 +171,10 @@ if __name__ == "__main__":
         print("processing trigger file:  ", filename, end=end)
         t, x, y, raw, cal, sum5, sum9, sum21, t0 = process(filename, 
                 calibrator,
-                thresh=args.thresh, 
+                thresh=max(args.thresh, calibrator.blk_lvl+1), 
                 tmin=args.tmin,
                 tmax=args.tmax,
+                xborder=args.xborder,
                 verbose=args.verbose)
 
         all_t     += list(t)
@@ -195,12 +197,14 @@ if __name__ == "__main__":
     all_sum21 = np.array(all_sum21)
     all_t0    = np.array(all_t0)
 
-    time = np.unique(all_t)
+    time = np.unique(np.hstack([all_t, all_t0]))
     rate = time.size / (time.max() - time.min())
+    
     
     print()
 
-    print("frame rate:      ", 1000*rate, "Hz")
+    print("frame rate       ", 1000*rate, "Hz")
+    print("hits per frame:  ", all_t.size / time.size)
     print("minimum time:    ", np.min(time))
     print("maximum time:    ", np.max(time))
     print("start date:      ", datetime.fromtimestamp(np.min(time)/1000))

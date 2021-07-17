@@ -99,46 +99,42 @@ def plot_array(statistic, title, cmap='viridis', log=False):
     global WIDTH, HEIGHT
 
     sort_stat = np.sort(statistic)
-    idx = statistic.size // 10
+    idx = statistic.size // 100
 
     vmin = sort_stat[idx]
     vmax = sort_stat[-idx]
 
     if log:
         norm = LogNorm(vmin=vmin, vmax=vmax)
-        plt.imshow(statistic.reshape(HEIGHT, WIDTH), cmap=cmap, norm=norm)
+        im = plt.imshow(statistic.reshape(HEIGHT, WIDTH), cmap=cmap, norm=norm, origin='lower')
     else:
-        plt.imshow(statistic.reshape(HEIGHT, WIDTH), cmap=cmap, vmin=vmin, vmax=vmax)
+        im = plt.imshow(statistic.reshape(HEIGHT, WIDTH), cmap=cmap, vmin=vmin, vmax=vmax, origin='lower')
 
     plt.title(title)
-    plt.xlabel('x')
-    plt.ylabel('y')
+    plt.xlabel('x [pixels]')
+    plt.ylabel('y [pixels]')
     plt.colorbar()
 
 
-def plot_points(nx,ny,mean, variance, gain, intercept, rsq):
-    for ix, iy in np.ndindex((nx, ny)):
-        plt.subplot(nx, ny, iy*nx + ix+1)
+def plot_points(ax, mean, variance, gain, intercept, rsq):
+ 
+    idx = np.random.randint(gain.size)
 
-        idx = np.random.randint(gain.size)
-
-        plt_x = mean[:,idx]
-        plt_y = variance[:,idx]
+    plt_x = mean[:,idx]
+    plt_y = variance[:,idx]
     
-        a = gain[idx]
-        b = intercept[idx]
-        x = np.linspace(0, 1.1*plt_x.max(), 100)
-        y = a * x + b
-        r2 = rsq[idx]
+    a = gain[idx]
+    b = intercept[idx]
+    x = np.linspace(0, 1.1*plt_x.max(), 100)
+    y = a * x + b
+    r2 = rsq[idx]
 
-        plt.plot(plt_x, plt_y, 'o', linestyle='', )
-        plt.plot(x, y, c='gold')
-        plt.xlabel(r'$\mu$')
-        plt.ylabel(r'$\sigma^2$')
-        plt.title(r'$R^2={}$'.format(r2))  
-
-    plt.tight_layout()
-
+    ax.plot(plt_x, plt_y, 'o', linestyle='', )
+    ax.plot(x, y, c='gold')
+    ax.set_xlabel(r'$\mu$')
+    ax.set_ylabel(r'$\sigma^2$')
+    ax.set_title(r'$R^2={:.4f}$'.format(r2))  
+        
 
 def plot_hist(x, y, xlabel=None, ylabel=None, title=None):
 
@@ -151,7 +147,7 @@ def plot_hist(x, y, xlabel=None, ylabel=None, title=None):
     xmax = xs[-idx]
     ymax = ys[-idx]
 
-    plt.hist2d(x, y, bins=(200,200), 
+    _,_,_,im = plt.hist2d(x, y, bins=(200,200), 
             range=((xmin,xmax), (ymin, ymax)), 
             norm=LogNorm())
     
@@ -162,7 +158,7 @@ def plot_hist(x, y, xlabel=None, ylabel=None, title=None):
     if title:
         plt.title(title)
 
-    plt.colorbar()
+    plt.colorbar(im, fraction=0.046, pad=0.04)
 
 
 
@@ -277,30 +273,33 @@ if __name__ == "__main__":
     n_figs = 0
     if args.spatial_plots or args.plot_all:
         n_figs += 1
-        plt.figure(n_figs, figsize=(10,6))
-        plot_array(gain, title='Gain', log=True, cmap='plasma')
+        plt.figure(n_figs, figsize=(4.1, 2.1), tight_layout=True)
+        plot_array(gain, title=None, cmap='plasma')
          
         n_figs += 1
-        plt.figure(n_figs, figsize=(10,6))
+        plt.figure(n_figs, figsize=(4.8, 2.6), tight_layout=True)
         plot_array(black_level, title='Black level', cmap='cool')
        
         n_figs += 1
-        plt.figure(n_figs, figsize=(10,6))
-        plot_array(rsq, title=r'$R^2$', cmap='seismic') 
+        plt.figure(n_figs, figsize=(4.1, 2.1), tight_layout=True)
+        plot_array(rsq, title=None, cmap='seismic') 
 
         n_figs += 1
-        plt.figure(n_figs, figsize=(10,6))
+        plt.figure(n_figs, figsize=(4.8, 2.6), tight_layout=True)
         plot_array(count, title='Data points', cmap='rainbow')
         
 
     if args.pix_plots or args.plot_all:
         n_figs += 1
-        plt.figure(n_figs, figsize=(15,10))
-        plot_points(4,4, mean, variance, gain, intercept, rsq)
+        figsize = (7.5, 4.8)
+        fig, axes = plt.subplots(2,3, figsize=figsize, tight_layout=True)
 
+        for ax in axes.flatten():
+            plot_points(ax, mean, variance, gain, intercept, rsq)
+        
     if args.scatterplot or args.plot_all:
         n_figs += 1
-        plt.figure(n_figs, figsize=(10,6))
+        plt.figure(n_figs, figsize=(6,4))
         plot_hist(gain, rsq, 
                 xlabel='Gain', ylabel=r'$R^2$')
 

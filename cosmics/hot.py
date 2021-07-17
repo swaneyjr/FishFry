@@ -14,7 +14,7 @@ from calibrate import Calibrator
 
 
 def process_dat(filename, calibrator, thresh=0, verbose=False):
-    header,px,py,highest,region,timestamp,millistamp,images,dropped = unpack_all(filename)
+    header,px,py,highest,region,timestamp,millistamp,images,dropped,millis_images = unpack_all(filename)
     if verbose:
         show_header(header)
 
@@ -64,6 +64,7 @@ if __name__ == "__main__":
     parser.add_argument('--calib', default='calib',help='location of calibration directory')
     parser.add_argument('--maxocc', default=1, type=int, help='maximum number of hits for "clean" pixel')
     parser.add_argument('-p', '--plot', action='store_true', help='plot pixel occupancies')
+    parser.add_argument('-s', '--small', action='store_true', help='Decrease plot size')
     parser.add_argument('-c', '--commit',action="store_true", help="save hot pixels to file.")
     parser.add_argument('-o', '--offline', action='store_true', help='include offline hotcels')
     parser.add_argument('-v', '--verbose', action="store_true", help="display file summary")
@@ -102,15 +103,23 @@ if __name__ == "__main__":
     hot = np.argwhere(occ > args.maxocc).flatten()
     
     if args.plot:
+        figsize = (4,3.2) if args.small else (7,5)
+        plt.figure(figsize=figsize, tight_layout=True)
         if args.maxocc > 1:
-            plt.hist(occ, bins=np.arange(args.maxocc+1), log=True)
+            plt.hist(occ, bins=np.arange(args.maxocc+1), log=True, histtype='stepfilled')
         elif occ.max() <= 200: 
-            plt.hist(occ, bins=np.arange(occ.max()+1), log=True)
+            plt.hist(occ, bins=np.arange(occ.max()+1), log=True, histtype='stepfilled')
         else:
             plt.hist(occ, bins=200, log=True)
-        plt.title('Pixel occupancies (clean)')
-        plt.xlabel('Trigger count')
-        plt.ylabel('Frequency (pixels)')
+        #bins = np.arange(args.maxocc+1)
+        #occ_hist = np.histogram(occ, bins=bins)[0]
+        #plt.hist(bins[:-1]/50000, bins=bins/50000, weights=occ_hist, log=True, histtype='stepfilled')
+        
+        #plt.errorbar(bins[1:-1], occ_hist[1:], yerr=np.sqrt(occ_hist[1:]), color='k')
+        #plt.loglog()
+        #plt.xlabel('Frequency of pixel hits [frames$^{-1}$]')
+        plt.xlabel('Number of triggers in 50,000 frames')
+        plt.ylabel('Number of pixels')
         plt.show()
 
     if args.commit:

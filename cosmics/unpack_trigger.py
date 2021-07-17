@@ -36,12 +36,14 @@ def unpack_all(filename):
         millistamp = np.array([],dtype="u4")
         dropped = 0
         images = 0
+        millis_images = np.array([],dtype="u4")
         while(True):
             ts = np.fromfile(f,dtype=">i8",count=1)[0]
             if (ts == 0):
                 break;
             ms = np.fromfile(f,dtype=">i8",count=1)[0]
             images = images+1
+            millis_images = np.append(millis_images, np.array([ms]))
             num_region = np.fromfile(f,dtype=">i4",count=1)[0]
             dropped   += np.fromfile(f,dtype=">i4",count=1)[0]
             region_data = np.fromfile(f,dtype=">i2",count=num_region*region_buffer)
@@ -59,11 +61,10 @@ def unpack_all(filename):
         region = np.reshape(region,(-1,region_size))
         header = np.append(header, threshold)
         header = np.append(header, prescale)
-        return header,px,py,highest,region,timestamp,millistamp,images,dropped
+        return header,px,py,highest,region,timestamp,millistamp,images,dropped, millis_images
 
 def unpack_header(filename):
-    header,px,py,highest,region,timestamp,millistamp,images,dropped = unpack_all(filename)
-    return header
+    return unpack_all(filename)[0]
 
 def interpret_header(header, param):    
     if param in header_map:

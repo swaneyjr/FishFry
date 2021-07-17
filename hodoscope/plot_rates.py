@@ -32,7 +32,7 @@ if __name__ == '__main__':
     plt.hist(b, bins=bins, histtype='step', label='B')
     plt.hist(c, bins=bins, histtype='step', label='C')
 
-    plt.xlabel('t')
+    plt.xlabel('t [ms]')
 
     plt.legend()
 

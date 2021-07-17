@@ -25,9 +25,23 @@ def mc(nf, hodo_rate, noise_rate, eff=1):
     t_noise = t_noise[t_noise < nf]
     
     t_trig = t_hodo[np.random.rand(t_hodo.size) < eff]
-    f_trig = np.sort(np.hstack([t_trig, t_noise])).astype(int)
+    hodo_vals = np.random.randint(1, 101, t_trig.size)
+    noise_vals = np.random.exponential(20, t_noise.size)
+    
+    fr_trig = np.hstack([t_trig, t_noise]).astype(int)
+    fr_vals = np.hstack([hodo_vals, noise_vals])
 
-    return np.unique(f_trig), t_hodo
+    unq_trig, idx, inv, n = np.unique(fr_trig, return_index=True, return_inverse=True, return_counts=True)
+    
+    # set all values at max for the frame so we can index the array
+    for fr in range(unq_trig.size):
+        if n[fr] == 1: continue
+        fr_idx = np.argwhere(inv == fr)
+        fr_vals[fr_idx] = max(fr_vals[fr_idx])
+
+    unq_vals = fr_vals[idx]
+
+    return unq_trig, unq_vals, t_hodo
 
 
 def estimate_eff(trig, hodo, nf, t_coinc=1):
@@ -301,14 +315,54 @@ if __name__ == '__main__':
     parser.add_argument('--ns', type=int, default=100, help='Number of MC samples')
     parser.add_argument('--window', type=float, default=1, help='Size of coincidence window in frames')
     parser.add_argument('--nbins', type=int, default=80, help='Number of bins to use in histogram')
+    parser.add_argument('--out_root', help='Generate simulated .root file of coincidences')
 
     args = parser.parse_args()
+
+    if args.out_root:
+        trig_times, trig_vals, hodo = mc(args.nf, args.hodo, args.noise, args.eff)
+        nontrig_times = np.delete(np.arange(args.nf), trig_times)
+        f = r.TFile(args.out_root, 'recreate')
+        
+        t0 = r.TTree('triggers', 'MC trigger timestamps')        
+        t_ = np.array([0], dtype=np.uint64)
+        max_ = np.array([0], dtype=np.uint32)
+
+        t0.Branch('t', t_, 't/l')
+        t0.Branch('max', max_, 'max/i')
+
+        for t,v in zip(trig_times, trig_vals):
+            t_[0] = t*1000
+            max_[0] = v
+            t0.Fill()
+
+        tn = r.TTree('nontriggers', 'MC empty timestamps')
+        tn.Branch('t', t_, 't/l')
+        for t in nontrig_times:
+            t_[0] = t*1000
+            tn.Fill()
+
+        f.Write()
+        f.Close()
+
+        # now output hodo times
+        # for simplicity give all three channels the same times
+
+        np.savez(args.out_root.replace('.root', '_hodo.npz'),
+                millis_a = hodo*1000,
+                millis_b = hodo*1000,
+                millis_c = hodo*1000,
+                interval_ti = [0],
+                interval_tf = [1000*args.nf+1])
+        
+
+        exit(0)
 
     eff = []
     err = []
     for i in range(args.ns):
         print(i+1, '/', args.ns, end='\r')
-        trig, hodo = mc(args.nf, args.hodo, args.noise, args.eff)
+        trig, _, hodo = mc(args.nf, args.hodo, args.noise, args.eff)
         eff_sample, eff_err = estimate_eff(trig, hodo, args.nf, args.window)
         eff.append(eff_sample)
         err.append(eff_err)

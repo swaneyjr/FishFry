@@ -103,7 +103,7 @@ def mc_ratio(thresh, gap1, gap2, n=2):
 def make_ratio_plots(exp_thresh, exp_ratio, exp_err, theory_thresh=None, theory_ratio=None, theory_err=None, plot_all=True, out=None):
     
     if plot_all:
-        ax_r = plt.subplot(131)
+        ax_r = plt.subplot(122)
     else:
         ax_r = plt.gca()
     ax_r.errorbar(exp_thresh, exp_ratio, yerr=exp_err, ls='', marker='o', color='k', label='Data')
@@ -123,7 +123,7 @@ def make_ratio_plots(exp_thresh, exp_ratio, exp_err, theory_thresh=None, theory_
     ax2y = ax_r.secondary_yaxis('right', functions=(ratio2thresh, thresh2ratio))
     ax2y.set_yticks(theory_thresh[::2])
     ax2y.set_yticks(theory_thresh[1::2], minor=True)
-    ax2y.set_ylabel('LYSO path length threshold (mm)') 
+    ax2y.set_ylabel('Path length thresh. [mm]') 
 
     # do weighted least squares fit
     exp_path = ratio2thresh(exp_ratio)
@@ -162,25 +162,25 @@ def make_ratio_plots(exp_thresh, exp_ratio, exp_err, theory_thresh=None, theory_
     if not np.any(w>0):
         return ax_r, None, None
 
-    ax_theory = plt.subplot(132)
+    ax_theory = plt.subplot(121)
     ax_theory.plot(theory_thresh, theory_ratio, 'k')
     ax_theory.fill_between(theory_thresh, 
             theory_ratio-theory_err, 
             theory_ratio+theory_err,
             color='k', alpha=0.4)
-    ax_theory.set_xlabel('Path length threshold (mm)')
+    ax_theory.set_xlabel('Path length thresh. [mm]')
     ax_theory.set_ylabel('Coincidence rate ratio')
 
-    ax_lin = plt.subplot(133)
+    #ax_lin = plt.subplot(133)
 
-    lin_err_lo = exp_path - ratio2thresh(exp_ratio - exp_err)
-    lin_err_hi = ratio2thresh(exp_ratio + exp_err) - exp_path
-    ax_lin.errorbar(exp_thresh[w>0], exp_path[w>0], yerr=(lin_err_lo, lin_err_hi), ls='', marker='o', color='k', label='Data')
-    ax_lin.plot(exp_thresh[w>0], a + b*x[w>0], 'k--', label='Linear fit')
-    ax_lin.set_xlabel('PMT threshold')
-    ax_lin.set_ylabel('Path length threshold (mm)')
-    ax_lin.set_ylim(0, 6)
-    plt.legend(loc='upper left')
+    #lin_err_lo = exp_path - ratio2thresh(exp_ratio - exp_err)
+    #lin_err_hi = ratio2thresh(exp_ratio + exp_err) - exp_path
+    #ax_lin.errorbar(exp_thresh[w>0], exp_path[w>0], yerr=(lin_err_lo, lin_err_hi), ls='', marker='o', color='k', label='Data')
+    #ax_lin.plot(exp_thresh[w>0], a + b*x[w>0], 'k--', label='Linear fit')
+    #ax_lin.set_xlabel('PMT threshold')
+    #ax_lin.set_ylabel('Path length thresh. [mm]')
+    #ax_lin.set_ylim(0, 6)
+    #plt.legend(loc='upper left')
 
     # do a chi^2 test for good measure
     
@@ -194,7 +194,7 @@ def make_ratio_plots(exp_thresh, exp_ratio, exp_err, theory_thresh=None, theory_
     if out:
         np.savez(out, coeffs=[a, b], cov=cov)
 
-    return ax_r, ax_theory, ax_lin
+    return ax_r, ax_theory, None #ax_lin
 
 
 if __name__ == '__main__':
@@ -254,8 +254,9 @@ if __name__ == '__main__':
     # check if the theory and experimental values intersect
     plot_all = exp_ratio.min() < theory_ratio.max() and exp_ratio.max() > theory_ratio.min()
 
-    figsize = (12,4) if plot_all else (5,4)
-    plt.figure(1, figsize=figsize)
+    figsize = (8,4) if plot_all else (4,4)
+    plt.figure(1, figsize=figsize, tight_layout=True)
+    plt.rc('font', size=13)
     ax_r, ax_theory, ax_lin = make_ratio_plots(
             exp_thresh, exp_ratio, exp_err, 
             theory_thresh, theory_ratio, theory_err,
@@ -264,7 +265,7 @@ if __name__ == '__main__':
     if ax_lin:
         add_voltage(ax_lin)
 
-    plt.tight_layout()
+    #plt.subplots_adjust(wspace=.1)
 
     plt.show()
 

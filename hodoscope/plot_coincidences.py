@@ -20,49 +20,61 @@ def coincidences(t1, t2):
 
 digit2dc = lambda digit: (digit-52)/255*5000
 
-def add_voltage(ax):
-    ax2 = ax.twiny()
-    ax2.xaxis.set_ticks_position('bottom')
-    ax2.xaxis.set_label_position('bottom')
-    ax2.spines['bottom'].set_position(('outward', 40))
-    ax2.set_xlabel('Threshold voltage (mV)')
-
-    # set range
-    xmin, xmax = ax.get_xlim()
-    ax2.set_xlim(digit2dc(xmin), digit2dc(xmax))
-
-if __name__ == '__main__':
-    from argparse import ArgumentParser
-    parser = ArgumentParser()
-
-    parser.add_argument('hodofile')
-
-    parser.add_argument('-a', action='store_true')
-    parser.add_argument('-b', action='store_true')
-    parser.add_argument('-c', action='store_true')
-
-    parser.add_argument('--thresh_range', type=int, nargs=2, default=(0,256), help='Min and max thresholds')
-
-    args = parser.parse_args()
-
-    f = np.load(args.hodofile)
+def process_file(hodofile, pair=None):
+    
+    if pair:
+        return process_pair(hodofile, pair)
+    
+    f = np.load(hodofile)
 
     thresh = []
     rate   = []
     err    = []
-    prob   = []
-    perr   = []
-    #rate1  = []
-    #err1   = []
-    #rate2  = []
-    #err2   = []
+   
+    tc = f.f.millis_c
+    thresh_c = f.f.thresh_c
+    interval_thresh = f.f.interval_c
+    
+    thr_vals = np.unique(thresh_c)
+    thr_min, thr_max = args.thresh_range
+    thr_vals = thr_vals[(thr_vals >= thr_min) & (thr_vals < thr_max)]
 
-    if args.a:
+    for t in thr_vals:
+        t_cut = tc[thresh_c == t]
+
+        # get unbiased intervals to measure rates
+        ti = f.f.interval_ti[interval_thresh == t]
+        tf = f.f.interval_tf[interval_thresh == t]
+        intervals = np.vstack([ti, tf]).T
+
+        r, e = get_rate(t_cut, intervals)
+        
+        thresh.append(t)
+        rate.append(r*1e6)
+        err.append(e*1e6)
+
+    return thresh, rate, err
+
+    
+def process_pair(hodofile, pair):
+    pair = pair.lower()
+    if not len(pair) == 2 or not set(pair).issubset(set('abc')): 
+        raise ValueError('Invalid "pair" argument')
+
+    f = np.load(hodofile)
+
+    thresh = []
+    rate   = []
+    err    = []
+    #prob   = []
+    #perr   = []
+
+    if 'a' in pair:
         t1 = f.f.millis_a
         thresh1 = f.f.thresh_a
         interval_thresh = f.f.interval_a
 
-        if args.b:
+        if 'b' in pair:
             t2 = f.f.millis_b
             thresh2 = f.f.thresh_b
             if not np.all(f.f.interval_a == f.f.interval_b):
@@ -105,39 +117,76 @@ if __name__ == '__main__':
         thresh.append(t)
         rate.append((rc - noise)*1e6)
         err.append(ec*1e6)
-        #rate1.append(r1*1e6)
-        #err1.append(e1*1e6)
-        #rate2.append(r2*1e6)
-        #err2.append(e2*1e6)
-        p = t12_cut.size / t1_cut.size
-        prob.append(p)
-        perr.append((p*(1-p)/t1_cut.size)**0.5)
+        #p = t12_cut.size / t1_cut.size
+        #prob.append(p)
+        #perr.append((p*(1-p)/t1_cut.size)**0.5)
 
-        print(t, t1_cut.size, t2_cut.size, t12_cut.size, (rc-noise)*1e6)
+        #print(t, t1_cut.size, t2_cut.size, t12_cut.size, (rc-noise)*1e6)
+
+    return thresh, rate, err
 
 
-    plt.figure(figsize=(4,4))
-    ax1 = plt.gca()
-    ax2 = ax1.twinx()
+def add_voltage(ax):
+    ax2 = ax.twiny()
+    ax2.xaxis.set_ticks_position('bottom')
+    ax2.xaxis.set_label_position('bottom')
+    ax2.spines['bottom'].set_position(('outward', 40))
+    ax2.set_xlabel('Threshold voltage [mV]')
+
+    # set range
+    xmin, xmax = ax.get_xlim()
+    ax2.set_xlim(digit2dc(xmin), digit2dc(xmax))
+
+if __name__ == '__main__':
+    from argparse import ArgumentParser
+    parser = ArgumentParser()
+
+    parser.add_argument('--hodofiles', nargs='+')
+    parser.add_argument('--labels', nargs='+')
+    parser.add_argument('--channels', nargs='+')
+
+    parser.add_argument('--thresh_range', type=int, nargs=2, default=(0,256), help='Min and max thresholds')
+
+    args = parser.parse_args()
+
+    plt.figure(figsize=(5,4), tight_layout=True)
+    plt.rc('font', size=12)
+    ax = plt.gca()
     
-    ax1.errorbar(thresh, rate, yerr=err, marker='', color='green')
-    ax2.errorbar(thresh, prob, yerr=perr, marker='', color='purple')
-    #ax2.errorbar(thresh, rate1, yerr=err1, marker='o', color='r')
-    #ax2.errorbar(thresh, rate2, yerr=err2, marker='o', color='r')
+    # add a single scintillator for reference
+    #thresh_c, rate_c, err_c = process_file(args.hodofiles[0], None)
+    #ax.errorbar(thresh_c, rate_c, yerr=err_c, marker='', label='Single PMT')
 
-    ax1.set_ylim(bottom=0)    
-    ax2.set_ylim(bottom=0)
+    second = False
+    for f, p, label in zip(args.hodofiles, args.channels, args.labels):
+        thresh, rate, err = process_file(f, p)
 
-    ax1.tick_params(axis='y', labelcolor='green')
-    ax2.tick_params(axis='y', labelcolor='purple')
+        if len(args.hodofiles) == 2 and second:
+            ax2 = ax.twinx()
+            ax2.errorbar(thresh, rate, yerr=err,
+                    ls=':', marker='', color='indigo')
+            ax2.tick_params(axis='y', labelcolor='indigo')
+            ax2.set_ylabel(label, color='indigo')
+            ax2.set_ylim(bottom=0)
+            #ax2.semilogy()
+    
+        elif len(args.hodofiles) == 2:
+            second = True
+            ax.errorbar(thresh, rate, yerr=err,
+                    ls=':', marker='', color='darkgreen')
+            ax.tick_params(axis='y', labelcolor='darkgreen')
+            ax.set_ylabel(label, color='darkgreen')
+            ax.set_ylim(bottom=0)
 
-    ax1.set_xlabel('PWM threshold')
-    ax1.set_ylabel('Coinc rate (mHz)', color='green')
-    #ax2.set_ylabel('Total rate (mHz)', color='r')
-    ax2.set_ylabel('Coinc probability', color='purple')
+        else:
+            ax.errorbar(thresh, rate, yerr=err, color='k', ls=':', marker='', label=label)
+            ax.set_ylabel('Coinc rate [mHz]')
+            ax.legend()
+            ax.semilogy()
 
-    add_voltage(ax1)
+    ax.set_xlabel('PWM threshold')
+    
+    add_voltage(ax)
 
-   
-    plt.tight_layout()
+    #plt.savefig('/home/jswaney/FishStandResults/systematics_rates.pdf', bbox_inches='tight')
     plt.show()

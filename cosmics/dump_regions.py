@@ -5,15 +5,16 @@
 import sys
 import argparse
 from datetime import datetime
+import numpy as np
 
 from unpack_trigger import interpret_header, unpack_all
 from calibrate import Calibrator
 
 def log_framerate(filename):
-    header,px,py,highest,region,timestamp,millistamp,images,dropped = unpack_all(filename)
+    header,px,py,highest,region,timestamp,millistamp,images,dropped,millis_images = unpack_all(filename)
 
-    tmin     = np.min(millistamp)
-    tmax     = np.max(millistamp)
+    tmin     = np.min(millis_images)
+    tmax     = np.max(millis_images)
     elapsed  = (tmax - tmin)*1E-3
     exposure = interpret_header(header, "exposure")*1E-9
     duration = elapsed / images if images else 0
@@ -28,7 +29,7 @@ def log_framerate(filename):
     print("deadtime frac:       ", dead)
 
 def log_regions(filename, calibrator=None, triggered=True, zerobias=True):
-    header,px,py,highest,region,timestamp,millistamp,images,dropped = unpack_all(filename)
+    header,px,py,highest,region,timestamp,millistamp,images,dropped,millis_images = unpack_all(filename)
 
     if calibrator:
         region = calibrator.calibrate_region(px,py,region,header)
